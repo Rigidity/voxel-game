@@ -36,7 +36,7 @@ fn main() {
     App::new()
         .insert_resource(ClearColor(Color::rgb(0.2, 0.5, 0.8)))
         .insert_resource(AmbientLight {
-            brightness: 0.5,
+            brightness: 1.0,
             ..default()
         })
         .init_resource::<Level>()
@@ -60,9 +60,12 @@ fn setup_world(
     mut materials: ResMut<Assets<StandardMaterial>>,
     server: Res<AssetServer>,
 ) {
-    let width = 12;
-    let depth = 6;
-    let height = 12;
+    let handle = server.load("dirt.png");
+
+    let width = 8;
+    let height = 6;
+    let depth = 8;
+
     for x in -width..width {
         for y in 0..=height {
             for z in -depth..depth {
@@ -70,9 +73,9 @@ fn setup_world(
                 level.load_chunk(&position);
 
                 let material = StandardMaterial {
-                    base_color_texture: Some(server.load("dirt.png")),
+                    base_color_texture: Some(handle.clone()),
                     perceptual_roughness: 1.0,
-                    reflectance: 0.0,
+                    reflectance: 0.25,
                     ..default()
                 };
 
@@ -97,7 +100,7 @@ fn setup_world(
         },
         transform: Transform {
             translation: Vec3::new(0.0, 500.0, 0.0),
-            rotation: Quat::from_rotation_x(-FRAC_PI_2 * 0.8),
+            rotation: Quat::from_rotation_x(-FRAC_PI_2),
             ..default()
         },
         ..default()
