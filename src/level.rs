@@ -1,47 +1,56 @@
 use bevy::{prelude::Resource, utils::HashMap};
-use noise::{NoiseFn, Perlin};
+use noise::{NoiseFn, Simplex};
 
 use crate::{
-    block::BlockPos,
-    chunk::{Chunk, ChunkPos},
+    chunk::{Chunk, CHUNK_SIZE},
+    position::{BlockPos, ChunkPos},
 };
 
-#[derive(Resource, Default)]
+#[derive(Default, Resource)]
 pub struct Level {
     loaded_chunks: HashMap<ChunkPos, Chunk>,
-    perlin_noise: Perlin,
+    noise: Simplex,
 }
 
 impl Level {
-    pub fn load_chunk(&mut self, position: ChunkPos) -> &Chunk {
-        if !self.loaded_chunks.contains_key(&position) {
-            let chunk = self.create_chunk(position);
-            self.loaded_chunks.insert(position, chunk);
+    pub fn load_chunk(&mut self, position: &ChunkPos) -> &Chunk {
+        if !self.loaded_chunks.contains_key(position) {
+            let chunk = self.generate_chunk(position);
+            self.loaded_chunks.insert(position.clone(), chunk);
         }
-        &self.loaded_chunks[&position]
+        &self.loaded_chunks[position]
     }
 
-    fn create_chunk(&mut self, position: ChunkPos) -> Chunk {
+    pub fn block(&self, position: &BlockPos) -> bool {
+        let (chunk_pos, (x, y, z)) = position.chunk_pos();
+
+        if let Some(chunk) = self.loaded_chunks.get(&chunk_pos) {
+            chunk.block_relative(x, y, z)
+        } else {
+            self.generate_block(position)
+        }
+    }
+
+    fn generate_chunk(&mut self, chunk_pos: &ChunkPos) -> Chunk {
         let mut chunk = Chunk::default();
-        for x in 0..16 {
-            for y in 0..16 {
-                for z in 0..16 {
-                    let total_x = position.x() * 16 + x as i32;
-                    let total_y = position.y() * 16 + y as i32;
-                    let total_z = position.z() * 16 + z as i32;
-
-                    let noise = self
-                        .perlin_noise
-                        .get([total_x as f64 / 16.0, total_z as f64 / 16.0]);
-
-                    let height = noise * 12.0 + 16.0;
-
-                    if total_y as f64 <= height {
-                        chunk.set_block(BlockPos::new(x, y, z), true);
+        for x in 0..CHUNK_SIZE {
+            for y in 0..CHUNK_SIZE {
+                for z in 0..CHUNK_SIZE {
+                    let block_pos = BlockPos::from(chunk_pos.clone()) + BlockPos::new(x, y, z);
+                    if self.generate_block(&block_pos) {
+                        *chunk.block_relative_mut(x as usize, y as usize, z as usize) = true;
                     }
                 }
             }
         }
         chunk
+    }
+
+    fn generate_block(&self, block_pos: &BlockPos) -> bool {
+        let noise = self
+            .noise
+            .get([block_pos.x as f64 / 100.0, block_pos.z as f64 / 100.0]);
+        let height = noise * 16.0 + 64.0;
+        block_pos.y as f64 <= height
     }
 }

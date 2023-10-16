@@ -4,22 +4,24 @@ use std::f32::consts::FRAC_PI_2;
 
 use bevy::{
     core_pipeline::experimental::taa::{TemporalAntiAliasBundle, TemporalAntiAliasPlugin},
-    pbr::{CascadeShadowConfigBuilder, ScreenSpaceAmbientOcclusionBundle},
+    pbr::ScreenSpaceAmbientOcclusionBundle,
     prelude::*,
 };
-use bevy_flycam::prelude::*;
-use block::{BasicBlock, Block, BlockPos};
-use chunk::{Chunk, ChunkPos, Dirty};
+use bevy_fps_counter::FpsCounterPlugin;
+use bevy_rapier3d::prelude::*;
+use block::{BasicBlock, Block};
+use chunk::{Dirty, CHUNK_SIZE};
 use chunk_builder::ChunkBuilder;
 use level::Level;
+use player::{Player, PlayerPlugin};
+use position::{BlockPos, ChunkPos};
 
 mod block;
 mod chunk;
 mod chunk_builder;
 mod level;
-
-#[derive(Component)]
-pub struct GameCamera;
+mod player;
+mod position;
 
 fn main() {
     App::new()
@@ -32,7 +34,9 @@ fn main() {
         .add_plugins((
             DefaultPlugins.set(ImagePlugin::default_nearest()),
             TemporalAntiAliasPlugin,
-            NoCameraPlayerPlugin,
+            RapierPhysicsPlugin::<NoUserData>::default(),
+            FpsCounterPlugin,
+            PlayerPlugin,
         ))
         .add_systems(Startup, setup_world)
         .add_systems(Update, generate_meshes)
@@ -45,11 +49,14 @@ fn setup_world(
     mut materials: ResMut<Assets<StandardMaterial>>,
     server: Res<AssetServer>,
 ) {
-    for x in -2i32..2i32 {
-        for y in -2i32..2i32 {
-            for z in -2i32..2i32 {
+    let width = 6;
+    let depth = 6;
+    let height = 8;
+    for x in -width..width {
+        for y in 0..=height {
+            for z in -depth..depth {
                 let position = ChunkPos::new(x, y, z);
-                level.load_chunk(position);
+                level.load_chunk(&position);
 
                 let material = StandardMaterial {
                     base_color_texture: Some(server.load("dirt.png")),
@@ -62,9 +69,9 @@ fn setup_world(
                     position,
                     materials.add(material),
                     TransformBundle::from_transform(Transform::from_xyz(
-                        x as f32 * 16.0,
-                        y as f32 * 16.0,
-                        z as f32 * 16.0,
+                        (x * CHUNK_SIZE) as f32,
+                        (y * CHUNK_SIZE) as f32,
+                        (z * CHUNK_SIZE) as f32,
                     )),
                     VisibilityBundle::default(),
                 ));
@@ -82,55 +89,56 @@ fn setup_world(
             rotation: Quat::from_rotation_x(-FRAC_PI_2 * 0.8),
             ..default()
         },
-        cascade_shadow_config: CascadeShadowConfigBuilder {
-            first_cascade_far_bound: 4.0,
-            maximum_distance: 10.0,
-            ..default()
-        }
-        .into(),
         ..default()
     });
 
     commands
-        .spawn((
-            GameCamera,
-            Camera3dBundle {
-                transform: Transform::from_xyz(0.0, 32.0, 0.0),
-                ..default()
-            },
-            FlyCam,
-        ))
+        .spawn(Player)
+        .insert(Camera3dBundle {
+            transform: Transform::from_xyz(0.0, 80.0, 0.0),
+            ..default()
+        })
         .insert(ScreenSpaceAmbientOcclusionBundle::default())
-        .insert(TemporalAntiAliasBundle::default());
+        .insert(ScreenSpaceAmbientOcclusionBundle::default())
+        .insert(TemporalAntiAliasBundle::default())
+        .insert(Collider::capsule(Vec3::NEG_Y, Vec3::default(), 0.5))
+        .insert(KinematicCharacterController::default())
+        .insert(RigidBody::Dynamic)
+        .insert(LockedAxes::ROTATION_LOCKED)
+        .insert(Ccd::enabled())
+        .insert(Sleeping::disabled())
+        .insert(Velocity::default());
 }
 
 fn generate_meshes(
     mut commands: Commands,
-    mut level: ResMut<Level>,
+    level: Res<Level>,
     mut meshes: ResMut<Assets<Mesh>>,
     query: Query<(Entity, &ChunkPos), Or<(With<Dirty>, Without<Handle<Mesh>>)>>,
 ) {
-    for (entity, &position) in query.iter() {
-        let chunk = level.load_chunk(position);
-        commands
-            .entity(entity)
-            .remove::<Dirty>()
-            .insert(meshes.add(create_mesh(chunk)));
+    for (entity, chunk_pos) in query.iter() {
+        let (mesh, collider) = build_chunk(&level, chunk_pos);
+        let mut entity = commands.entity(entity);
+        entity.remove::<Dirty>().insert(meshes.add(mesh));
+        if let Some(collider) = collider {
+            entity.insert(collider);
+        }
     }
 }
 
-fn create_mesh(chunk: &Chunk) -> Mesh {
+fn build_chunk(level: &Level, chunk_pos: &ChunkPos) -> (Mesh, Option<Collider>) {
     let mut chunk_builder = ChunkBuilder::new();
-    for x in 0..16 {
-        for y in 0..16 {
-            for z in 0..16 {
-                let block_pos = BlockPos::new(x, y, z);
-                if !chunk.get_block(block_pos) {
+    for x in 0..CHUNK_SIZE {
+        for y in 0..CHUNK_SIZE {
+            for z in 0..CHUNK_SIZE {
+                let block_pos = BlockPos::from(chunk_pos.clone()) + BlockPos::new(x, y, z);
+                if !level.block(&block_pos) {
                     continue;
                 }
-                BasicBlock::render(&mut chunk_builder, block_pos);
+                let translation = Vec3::new(x as f32, y as f32, z as f32);
+                BasicBlock::render(level, &mut chunk_builder, &block_pos, translation);
             }
         }
     }
-    chunk_builder.mesh()
+    chunk_builder.build()
 }
