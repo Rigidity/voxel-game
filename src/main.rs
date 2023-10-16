@@ -23,6 +23,15 @@ mod level;
 mod player;
 mod position;
 
+#[derive(States, Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum GameState {
+    LoadAssets,
+    MainMenu,
+    #[default]
+    LoadLevel,
+    InGame,
+}
+
 fn main() {
     App::new()
         .insert_resource(ClearColor(Color::rgb(0.2, 0.5, 0.8)))
@@ -30,7 +39,8 @@ fn main() {
             brightness: 0.5,
             ..default()
         })
-        .insert_resource(Level::default())
+        .init_resource::<Level>()
+        .add_state::<GameState>()
         .add_plugins((
             DefaultPlugins.set(ImagePlugin::default_nearest()),
             TemporalAntiAliasPlugin,
@@ -38,20 +48,21 @@ fn main() {
             FpsCounterPlugin,
             PlayerPlugin,
         ))
-        .add_systems(Startup, setup_world)
-        .add_systems(Update, generate_meshes)
+        .add_systems(OnEnter(GameState::LoadLevel), setup_world)
+        .add_systems(Update, generate_meshes.run_if(in_state(GameState::InGame)))
         .run();
 }
 
 fn setup_world(
     mut commands: Commands,
+    mut game_state: ResMut<NextState<GameState>>,
     mut level: ResMut<Level>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     server: Res<AssetServer>,
 ) {
-    let width = 6;
+    let width = 12;
     let depth = 6;
-    let height = 8;
+    let height = 12;
     for x in -width..width {
         for y in 0..=height {
             for z in -depth..depth {
@@ -108,6 +119,8 @@ fn setup_world(
         .insert(Ccd::enabled())
         .insert(Sleeping::disabled())
         .insert(Velocity::default());
+
+    game_state.set(GameState::InGame);
 }
 
 fn generate_meshes(

@@ -6,6 +6,8 @@ use bevy::{
 };
 use bevy_rapier3d::prelude::Velocity;
 
+use crate::GameState;
+
 #[derive(Component)]
 pub struct Player;
 
@@ -19,8 +21,12 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<InputState>()
-            .add_systems(Startup, grab_cursor)
-            .add_systems(Update, (escape_toggle_grab, player_look, player_move));
+            .add_systems(OnEnter(GameState::InGame), enter_grab_cursor)
+            .add_systems(OnExit(GameState::InGame), exit_ungrab_cursor)
+            .add_systems(
+                Update,
+                (escape_toggle_grab, player_look, player_move).run_if(in_state(GameState::InGame)),
+            );
     }
 }
 
@@ -99,26 +105,36 @@ fn escape_toggle_grab(
 ) {
     if keys.just_pressed(KeyCode::Escape) {
         if let Ok(mut window) = primary_window.get_single_mut() {
-            toggle_grab_mode(&mut window);
+            toggle_grab(&mut window);
         }
     }
 }
 
-fn grab_cursor(mut primary_window: Query<&mut Window, With<PrimaryWindow>>) {
+fn enter_grab_cursor(mut primary_window: Query<&mut Window, With<PrimaryWindow>>) {
     if let Ok(mut window) = primary_window.get_single_mut() {
-        toggle_grab_mode(&mut window);
+        set_grab(&mut window, true);
     }
 }
 
-fn toggle_grab_mode(window: &mut Window) {
+fn exit_ungrab_cursor(mut primary_window: Query<&mut Window, With<PrimaryWindow>>) {
+    if let Ok(mut window) = primary_window.get_single_mut() {
+        set_grab(&mut window, true);
+    }
+}
+
+fn toggle_grab(window: &mut Window) {
     match window.cursor.grab_mode {
-        CursorGrabMode::None => {
-            window.cursor.grab_mode = CursorGrabMode::Confined;
-            window.cursor.visible = false;
-        }
-        _ => {
-            window.cursor.grab_mode = CursorGrabMode::None;
-            window.cursor.visible = true;
-        }
+        CursorGrabMode::None => set_grab(window, true),
+        _ => set_grab(window, false),
+    }
+}
+
+fn set_grab(window: &mut Window, grab: bool) {
+    if grab {
+        window.cursor.grab_mode = CursorGrabMode::Confined;
+        window.cursor.visible = false;
+    } else {
+        window.cursor.grab_mode = CursorGrabMode::None;
+        window.cursor.visible = true;
     }
 }

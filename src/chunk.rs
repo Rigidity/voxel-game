@@ -3,7 +3,7 @@ use bevy::prelude::Component;
 #[derive(Component)]
 pub struct Dirty;
 
-pub const CHUNK_SIZE: i32 = 16;
+pub const CHUNK_SIZE: i32 = 32;
 
 pub struct Chunk {
     blocks: [[[bool; CHUNK_SIZE as usize]; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
