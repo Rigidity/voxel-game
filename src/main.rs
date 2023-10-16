@@ -1,32 +1,19 @@
 #![allow(clippy::type_complexity)]
 
-use bevy::{app::AppExit, prelude::*, utils::HashMap};
+use bevy::{app::AppExit, prelude::*};
 use bevy_flycam::prelude::*;
-use block::{BasicBlock, Block};
+use block::{BasicBlock, Block, BlockPos};
+use chunk::{Chunk, ChunkPos, Dirty};
 use chunk_builder::ChunkBuilder;
-use noise::{NoiseFn, Perlin};
+use level::Level;
 
 mod block;
+mod chunk;
 mod chunk_builder;
+mod level;
 
 #[derive(Component)]
 pub struct GameCamera;
-
-#[derive(Resource, Default)]
-pub struct Level {
-    loaded_chunks: HashMap<ChunkPos, Chunk>,
-}
-
-#[derive(Default)]
-pub struct Chunk {
-    blocks: [[[bool; 16]; 16]; 16],
-}
-
-#[derive(Component, Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ChunkPos(i32, i32, i32);
-
-#[derive(Component)]
-pub struct Dirty;
 
 fn main() {
     App::new()
@@ -45,40 +32,18 @@ fn setup_world(
     mut materials: ResMut<Assets<StandardMaterial>>,
     server: Res<AssetServer>,
 ) {
-    let noise = Perlin::new(42);
-
-    for i in -2i32..2i32 {
-        for j in -2i32..2i32 {
-            for k in -2i32..2i32 {
-                let mut chunk = Chunk::default();
-
-                for x in 0..16 {
-                    for y in 0..16 {
-                        for z in 0..16 {
-                            let total_x = i * 16 + x as i32;
-                            let total_y = j * 16 + y as i32;
-                            let total_z = k * 16 + z as i32;
-
-                            chunk.blocks[x][y][z] = (total_y as f64)
-                                < (16.0
-                                    + 12.0
-                                        * noise
-                                            .get([total_x as f64 / 16.0, total_z as f64 / 16.0]));
-                        }
-                    }
-                }
-
-                let position = ChunkPos(i, j, k);
-
-                level.loaded_chunks.insert(position, chunk);
-
+    for x in -2i32..2i32 {
+        for y in -2i32..2i32 {
+            for z in -2i32..2i32 {
+                let position = ChunkPos::new(x, y, z);
+                level.load_chunk(position);
                 commands.spawn((
                     position,
                     materials.add(server.load("dirt.png").into()),
                     TransformBundle::from_transform(Transform::from_xyz(
-                        i as f32 * 16.0,
-                        j as f32 * 16.0,
-                        k as f32 * 16.0,
+                        x as f32 * 16.0,
+                        y as f32 * 16.0,
+                        z as f32 * 16.0,
                     )),
                     VisibilityBundle::default(),
                 ));
@@ -106,12 +71,12 @@ fn setup_world(
 
 fn generate_meshes(
     mut commands: Commands,
-    level: Res<Level>,
+    mut level: ResMut<Level>,
     mut meshes: ResMut<Assets<Mesh>>,
     query: Query<(Entity, &ChunkPos), Or<(With<Dirty>, Without<Handle<Mesh>>)>>,
 ) {
-    for (entity, position) in query.iter() {
-        let chunk = &level.loaded_chunks[position];
+    for (entity, &position) in query.iter() {
+        let chunk = level.load_chunk(position);
         commands
             .entity(entity)
             .remove::<Dirty>()
@@ -124,10 +89,11 @@ fn create_mesh(chunk: &Chunk) -> Mesh {
     for x in 0..16 {
         for y in 0..16 {
             for z in 0..16 {
-                if !chunk.blocks[x][y][z] {
+                let block_pos = BlockPos::new(x, y, z);
+                if !chunk.get_block(block_pos) {
                     continue;
                 }
-                BasicBlock::render(&mut chunk_builder, [x as f32, y as f32, z as f32]);
+                BasicBlock::render(&mut chunk_builder, block_pos);
             }
         }
     }
