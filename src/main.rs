@@ -2,10 +2,12 @@
 
 use bevy::{app::AppExit, prelude::*, utils::HashMap};
 use bevy_flycam::prelude::*;
-use create_chunk::create_mesh;
+use block::{BasicBlock, Block};
+use chunk_builder::ChunkBuilder;
 use noise::{NoiseFn, Perlin};
 
-mod create_chunk;
+mod block;
+mod chunk_builder;
 
 #[derive(Component)]
 pub struct GameCamera;
@@ -45,9 +47,9 @@ fn setup_world(
 ) {
     let noise = Perlin::new(42);
 
-    for i in -4i32..4i32 {
-        for j in -4i32..4i32 {
-            for k in -4i32..4i32 {
+    for i in -2i32..2i32 {
+        for j in -2i32..2i32 {
+            for k in -2i32..2i32 {
                 let mut chunk = Chunk::default();
 
                 for x in 0..16 {
@@ -58,8 +60,8 @@ fn setup_world(
                             let total_z = k * 16 + z as i32;
 
                             chunk.blocks[x][y][z] = (total_y as f64)
-                                < (32.0
-                                    + 8.0
+                                < (16.0
+                                    + 12.0
                                         * noise
                                             .get([total_x as f64 / 16.0, total_z as f64 / 16.0]));
                         }
@@ -92,7 +94,14 @@ fn setup_world(
         ..default()
     });
 
-    commands.spawn((GameCamera, Camera3dBundle::default(), FlyCam));
+    commands.spawn((
+        GameCamera,
+        Camera3dBundle {
+            transform: Transform::from_xyz(0.0, 32.0, 0.0),
+            ..default()
+        },
+        FlyCam,
+    ));
 }
 
 fn generate_meshes(
@@ -108,6 +117,21 @@ fn generate_meshes(
             .remove::<Dirty>()
             .insert(meshes.add(create_mesh(chunk)));
     }
+}
+
+fn create_mesh(chunk: &Chunk) -> Mesh {
+    let mut chunk_builder = ChunkBuilder::new();
+    for x in 0..16 {
+        for y in 0..16 {
+            for z in 0..16 {
+                if !chunk.blocks[x][y][z] {
+                    continue;
+                }
+                BasicBlock::render(&mut chunk_builder, [x as f32, y as f32, z as f32]);
+            }
+        }
+    }
+    chunk_builder.mesh()
 }
 
 fn keyboard_input(keys: Res<Input<KeyCode>>, mut app_exit_events: ResMut<Events<AppExit>>) {
