@@ -6,6 +6,8 @@ edition = "2021"
 [dependencies]
 bevy = "0.11.3"
 bevy-fps-counter = "0.2.0"
+bevy-tnua = { version = "0.10.0", features = ["rapier_3d"] }
+bevy_framepace = "0.13.3"
 bevy_rapier3d = "0.22.0"
 derive_more = "0.99.17"
 noise = "0.8.2"

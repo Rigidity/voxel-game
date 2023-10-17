@@ -8,7 +8,13 @@ use bevy::{
     prelude::*,
 };
 use bevy_fps_counter::FpsCounterPlugin;
+use bevy_framepace::{FramepaceSettings, Limiter};
 use bevy_rapier3d::prelude::*;
+use bevy_tnua::{
+    prelude::{TnuaControllerBundle, TnuaControllerPlugin},
+    TnuaRapier3dIOBundle, TnuaRapier3dPlugin,
+};
+
 use block::{BasicBlock, Block};
 use chunk::{Dirty, CHUNK_SIZE};
 use chunk_builder::ChunkBuilder;
@@ -39,6 +45,16 @@ fn main() {
             brightness: 1.0,
             ..default()
         })
+        .insert_resource(RapierConfiguration {
+            timestep_mode: TimestepMode::Fixed {
+                dt: 0.008,
+                substeps: 4,
+            },
+            ..default()
+        })
+        .insert_resource(FramepaceSettings {
+            limiter: Limiter::Manual(std::time::Duration::from_secs_f64(0.008)),
+        })
         .init_resource::<Level>()
         .add_state::<GameState>()
         .add_plugins((
@@ -47,6 +63,8 @@ fn main() {
             RapierPhysicsPlugin::<NoUserData>::default(),
             FpsCounterPlugin,
             PlayerPlugin,
+            TnuaRapier3dPlugin,
+            TnuaControllerPlugin,
         ))
         .add_systems(OnEnter(GameState::LoadLevel), setup_world)
         .add_systems(Update, generate_meshes.run_if(in_state(GameState::InGame)))
@@ -108,20 +126,16 @@ fn setup_world(
 
     commands
         .spawn(Player)
+        .insert(RigidBody::Dynamic)
+        .insert(TnuaRapier3dIOBundle::default())
+        .insert(TnuaControllerBundle::default())
+        .insert(Collider::capsule_y(1.0, 0.45))
         .insert(Camera3dBundle {
-            transform: Transform::from_xyz(0.0, 80.0, 0.0),
+            transform: Transform::from_xyz(0.0, 90.0, 0.0),
             ..default()
         })
         .insert(ScreenSpaceAmbientOcclusionBundle::default())
-        .insert(ScreenSpaceAmbientOcclusionBundle::default())
-        .insert(TemporalAntiAliasBundle::default())
-        .insert(Collider::capsule(Vec3::NEG_Y, Vec3::default(), 0.5))
-        .insert(KinematicCharacterController::default())
-        .insert(RigidBody::Dynamic)
-        .insert(LockedAxes::ROTATION_LOCKED)
-        .insert(Ccd::enabled())
-        .insert(Sleeping::disabled())
-        .insert(Velocity::default());
+        .insert(TemporalAntiAliasBundle::default());
 
     game_state.set(GameState::InGame);
 }

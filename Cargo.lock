@@ -296,6 +296,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bevy-tnua"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da8cb1fbfb6c2a33c8776abeafebb9799b29628b878707ec3922ff7f3d6225e0"
+dependencies = [
+ "bevy",
+ "bevy_rapier3d",
+]
+
+[[package]]
 name = "bevy_a11y"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -494,6 +504,16 @@ checksum = "d0ac0f55ad6bca1be7b0f35bbd5fc95ed3d31e4e9db158fee8e5327f59006001"
 dependencies = [
  "bevy_macro_utils",
  "encase_derive_impl",
+]
+
+[[package]]
+name = "bevy_framepace"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07d7576b5cd203ad30feb8df8993236599cb06b24b672d8aa904caeb278b6f87"
+dependencies = [
+ "bevy",
+ "spin_sleep",
 ]
 
 [[package]]
@@ -1657,6 +1677,8 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy-fps-counter",
+ "bevy-tnua",
+ "bevy_framepace",
  "bevy_rapier3d",
  "derive_more",
  "noise",
@@ -3182,6 +3204,16 @@ dependencies = [
  "optional",
  "robust",
  "smallvec",
+]
+
+[[package]]
+name = "spin_sleep"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cafa7900db085f4354dbc7025e25d7a839a14360ea13b5fc4fd717f2d3b23134"
+dependencies = [
+ "once_cell",
+ "winapi",
 ]
 
 [[package]]

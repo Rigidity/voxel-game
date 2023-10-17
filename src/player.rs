@@ -4,7 +4,7 @@ use bevy::{
     prelude::*,
     window::{CursorGrabMode, PrimaryWindow, Window},
 };
-use bevy_rapier3d::prelude::Velocity;
+use bevy_rapier3d::prelude::KinematicCharacterController;
 
 use crate::GameState;
 
@@ -25,25 +25,22 @@ impl Plugin for PlayerPlugin {
             .add_systems(OnExit(GameState::InGame), exit_ungrab_cursor)
             .add_systems(
                 Update,
-                (escape_toggle_grab, player_look, player_move).run_if(in_state(GameState::InGame)),
+                (escape_toggle_grab).run_if(in_state(GameState::InGame)),
             );
     }
 }
 
 const SENSITIVITY: f32 = 0.00012;
-const SPEED: f32 = 24.0;
+const SPEED: f32 = 12.0;
 
 fn player_move(
     keys: Res<Input<KeyCode>>,
     time: Res<Time>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
-    mut query: Query<(&Transform, &mut Velocity), With<Player>>,
+    mut query: Query<(&mut KinematicCharacterController, &Transform), With<Player>>,
 ) {
     if let Ok(window) = primary_window.get_single() {
-        for (transform, mut velocity) in query.iter_mut() {
-            velocity.linvel *= 0.99;
-            velocity.linvel.y -= 0.1;
-
+        for (mut controller, transform) in query.iter_mut() {
             let mut added_velocity = Vec3::ZERO;
             let local_z = transform.local_z();
             let forward = -Vec3::new(local_z.x, 0.0, local_z.z);
@@ -59,12 +56,15 @@ fn player_move(
                         _ => {}
                     }
                 }
-                velocity.linvel += added_velocity * time.delta_seconds() * SPEED
             }
 
             if keys.just_pressed(KeyCode::Space) {
-                velocity.linvel.y += 12.0;
+                added_velocity.y += 24.0;
+            } else {
+                added_velocity.y -= 0.4;
             }
+
+            controller.translation = Some(added_velocity * time.delta_seconds() * SPEED);
         }
     }
 }
