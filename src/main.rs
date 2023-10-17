@@ -8,18 +8,13 @@ use bevy::{
     prelude::*,
 };
 use bevy_fps_counter::FpsCounterPlugin;
-use bevy_framepace::{FramepaceSettings, Limiter};
 use bevy_rapier3d::prelude::*;
-use bevy_tnua::{
-    prelude::{TnuaControllerBundle, TnuaControllerPlugin},
-    TnuaRapier3dIOBundle, TnuaRapier3dPlugin,
-};
 
 use block::{BasicBlock, Block};
 use chunk::{Dirty, CHUNK_SIZE};
 use chunk_builder::ChunkBuilder;
 use level::Level;
-use player::{Player, PlayerPlugin};
+use player::{Player, PlayerCamera, PlayerPlugin};
 use position::{BlockPos, ChunkPos};
 
 mod block;
@@ -29,15 +24,6 @@ mod level;
 mod player;
 mod position;
 
-#[derive(States, Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum GameState {
-    LoadAssets,
-    MainMenu,
-    #[default]
-    LoadLevel,
-    InGame,
-}
-
 fn main() {
     App::new()
         .insert_resource(ClearColor(Color::rgb(0.2, 0.5, 0.8)))
@@ -45,35 +31,25 @@ fn main() {
             brightness: 1.0,
             ..default()
         })
-        .insert_resource(RapierConfiguration {
-            timestep_mode: TimestepMode::Fixed {
-                dt: 0.008,
-                substeps: 4,
-            },
-            ..default()
-        })
-        .insert_resource(FramepaceSettings {
-            limiter: Limiter::Manual(std::time::Duration::from_secs_f64(0.008)),
-        })
         .init_resource::<Level>()
-        .add_state::<GameState>()
         .add_plugins((
             DefaultPlugins.set(ImagePlugin::default_nearest()),
             TemporalAntiAliasPlugin,
             RapierPhysicsPlugin::<NoUserData>::default(),
             FpsCounterPlugin,
             PlayerPlugin,
-            TnuaRapier3dPlugin,
-            TnuaControllerPlugin,
         ))
-        .add_systems(OnEnter(GameState::LoadLevel), setup_world)
-        .add_systems(Update, generate_meshes.run_if(in_state(GameState::InGame)))
+        .insert_resource(RapierConfiguration {
+            gravity: Vec3::Y * -9.81 * 2.5,
+            ..default()
+        })
+        .add_systems(Startup, setup_world)
+        .add_systems(Update, generate_meshes)
         .run();
 }
 
 fn setup_world(
     mut commands: Commands,
-    mut game_state: ResMut<NextState<GameState>>,
     mut level: ResMut<Level>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     server: Res<AssetServer>,
@@ -106,6 +82,7 @@ fn setup_world(
                         (z * CHUNK_SIZE) as f32,
                     )),
                     VisibilityBundle::default(),
+                    Friction::new(0.25),
                 ));
             }
         }
@@ -126,18 +103,23 @@ fn setup_world(
 
     commands
         .spawn(Player)
+        .insert(TransformBundle::default())
+        .insert(Collider::capsule(Vec3::ZERO, Vec3::Y * 1.8, 0.45))
         .insert(RigidBody::Dynamic)
-        .insert(TnuaRapier3dIOBundle::default())
-        .insert(TnuaControllerBundle::default())
-        .insert(Collider::capsule_y(1.0, 0.45))
-        .insert(Camera3dBundle {
-            transform: Transform::from_xyz(0.0, 90.0, 0.0),
-            ..default()
-        })
-        .insert(ScreenSpaceAmbientOcclusionBundle::default())
-        .insert(TemporalAntiAliasBundle::default());
-
-    game_state.set(GameState::InGame);
+        .insert(LockedAxes::ROTATION_LOCKED)
+        .insert(Velocity::default())
+        .insert(Friction::new(0.0))
+        .insert(Transform::from_xyz(0.0, 90.0, 0.0))
+        .with_children(|commands| {
+            commands
+                .spawn(PlayerCamera)
+                .insert(Camera3dBundle {
+                    transform: Transform::from_xyz(0.0, 1.0, 0.0),
+                    ..default()
+                })
+                .insert(ScreenSpaceAmbientOcclusionBundle::default())
+                .insert(TemporalAntiAliasBundle::default());
+        });
 }
 
 fn generate_meshes(
