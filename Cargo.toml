@@ -8,7 +8,6 @@ bevy = "0.11.3"
 bevy-fps-counter = "0.2.0"
 bevy_rapier3d = "0.22.0"
 derive_more = "0.99.17"
-noise = "0.8.2"
 
 [profile.dev]
 opt-level = 1

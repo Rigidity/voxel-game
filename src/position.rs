@@ -41,7 +41,7 @@ impl BlockPos {
         let (chunk_z, block_z) = (self.z / CHUNK_SIZE, self.z.rem_euclid(CHUNK_SIZE));
         (
             ChunkPos::new(chunk_x, chunk_y, chunk_z),
-            (block_x as usize, block_y as usize, block_z as usize),
+            (block_x, block_y, block_z),
         )
     }
 }
@@ -58,7 +58,7 @@ impl From<ChunkPos> for BlockPos {
 
 impl From<BlockPos> for Vec3 {
     fn from(value: BlockPos) -> Self {
-        Self::new(value.x as f32, value.y as f32, value.z as f32)
+        Self::new(value.x, value.y, value.z)
     }
 }
 
@@ -93,6 +93,16 @@ impl ChunkPos {
 
     pub fn new(x: i32, y: i32, z: i32) -> Self {
         Self { x, y, z }
+    }
+
+    pub fn center(&self) -> Vec3 {
+        let block_pos = BlockPos::from(self.clone());
+        let add = CHUNK_SIZE / 2;
+        Vec3::new(
+            (block_pos.x + add),
+            (block_pos.y + add),
+            (block_pos.z + add),
+        )
     }
 }
 

@@ -3,16 +3,16 @@ use bevy::prelude::Component;
 #[derive(Component)]
 pub struct Dirty;
 
-pub const CHUNK_SIZE: i32 = 32;
+pub const CHUNK_SIZE: usize = 32;
 
 pub struct Chunk {
-    blocks: [[[bool; CHUNK_SIZE as usize]; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+    blocks: [[[bool; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE],
 }
 
 impl Default for Chunk {
     fn default() -> Self {
         Self {
-            blocks: [[[false; CHUNK_SIZE as usize]; CHUNK_SIZE as usize]; CHUNK_SIZE as usize],
+            blocks: [[[false; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE],
         }
     }
 }

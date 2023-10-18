@@ -15,12 +15,24 @@ impl Block for BasicBlock {
         block_pos: &BlockPos,
         Vec3 { x, y, z }: Vec3,
     ) {
-        let left = level.block(&(block_pos.clone() - BlockPos::X));
-        let right = level.block(&(block_pos.clone() + BlockPos::X));
-        let top = level.block(&(block_pos.clone() + BlockPos::Y));
-        let bottom = level.block(&(block_pos.clone() - BlockPos::Y));
-        let front = level.block(&(block_pos.clone() + BlockPos::Z));
-        let back = level.block(&(block_pos.clone() - BlockPos::Z));
+        let left = level
+            .block(&(block_pos.clone() - BlockPos::X))
+            .unwrap_or_default();
+        let right = level
+            .block(&(block_pos.clone() + BlockPos::X))
+            .unwrap_or_default();
+        let top = level
+            .block(&(block_pos.clone() + BlockPos::Y))
+            .unwrap_or_default();
+        let bottom = level
+            .block(&(block_pos.clone() - BlockPos::Y))
+            .unwrap_or_default();
+        let front = level
+            .block(&(block_pos.clone() + BlockPos::Z))
+            .unwrap_or_default();
+        let back = level
+            .block(&(block_pos.clone() - BlockPos::Z))
+            .unwrap_or_default();
 
         // Left
         if !left {

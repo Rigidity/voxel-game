@@ -1,10 +1,14 @@
+use std::f32::consts::FRAC_PI_2;
+
 use bevy::{
+    core_pipeline::experimental::taa::TemporalAntiAliasBundle,
     ecs::event::ManualEventReader,
     input::mouse::MouseMotion,
+    pbr::ScreenSpaceAmbientOcclusionBundle,
     prelude::*,
     window::{CursorGrabMode, PrimaryWindow, Window},
 };
-use bevy_rapier3d::prelude::Velocity;
+use bevy_rapier3d::prelude::*;
 
 #[derive(Component)]
 pub struct Player;
@@ -26,7 +30,8 @@ pub struct MovementSpeed(pub f32);
 
 impl Default for MovementSpeed {
     fn default() -> Self {
-        Self(50.0)
+        // Self(70.0)
+        Self(300.0)
     }
 }
 
@@ -64,9 +69,35 @@ impl Plugin for PlayerPlugin {
             .init_resource::<MouseSensitivity>()
             .init_resource::<MovementSpeed>()
             .init_resource::<MovementControls>()
-            .add_systems(Startup, setup_input)
+            .add_systems(Startup, (setup_player, setup_input))
             .add_systems(Update, (toggle_grab, player_look, player_move));
     }
+}
+
+fn setup_player(mut commands: Commands) {
+    commands
+        .spawn(Player)
+        .insert(TransformBundle::default())
+        .insert(Collider::capsule(Vec3::ZERO, Vec3::Y * 1.8, 0.45))
+        .insert(RigidBody::Dynamic)
+        .insert(LockedAxes::ROTATION_LOCKED)
+        .insert(Velocity::default())
+        .insert(Friction::new(0.0))
+        .insert(Transform::from_xyz(0.0, 90.0, 0.0))
+        .with_children(|commands| {
+            commands
+                .spawn(PlayerCamera)
+                .insert(Camera3dBundle {
+                    transform: Transform::from_xyz(0.0, 1.0, 0.0),
+                    projection: Projection::Perspective(PerspectiveProjection {
+                        fov: FRAC_PI_2,
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .insert(ScreenSpaceAmbientOcclusionBundle::default())
+                .insert(TemporalAntiAliasBundle::default());
+        });
 }
 
 fn player_look(
@@ -134,7 +165,7 @@ fn player_move(
         movement += right;
     }
 
-    let slow_factor = (1.0 - time.delta_seconds() * 6.0).max(0.0);
+    let slow_factor = (1.0 - time.delta_seconds() * 8.0).max(0.0);
     velocity.linvel.x *= slow_factor;
     velocity.linvel.z *= slow_factor;
 
