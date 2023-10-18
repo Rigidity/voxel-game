@@ -1,4 +1,5 @@
 use bevy::{prelude::Resource, utils::HashMap};
+use noise::{NoiseFn, Perlin};
 
 use crate::{
     chunk::{Chunk, CHUNK_SIZE},
@@ -8,6 +9,7 @@ use crate::{
 #[derive(Default, Resource)]
 pub struct Level {
     loaded_chunks: HashMap<ChunkPos, Chunk>,
+    noise: Perlin,
 }
 
 impl Level {
@@ -40,7 +42,8 @@ impl Level {
         for x in 0..CHUNK_SIZE {
             for y in 0..CHUNK_SIZE {
                 for z in 0..CHUNK_SIZE {
-                    let block_pos = BlockPos::from(chunk_pos.clone()) + BlockPos::new(x, y, z);
+                    let block_pos = BlockPos::from(chunk_pos.clone())
+                        + BlockPos::new(x as i32, y as i32, z as i32);
                     if self.generate_block(&block_pos) {
                         *chunk.block_relative_mut(x, y, z) = true;
                     }
@@ -51,6 +54,10 @@ impl Level {
     }
 
     fn generate_block(&self, block_pos: &BlockPos) -> bool {
-        block_pos.y <= 64
+        let noise = self
+            .noise
+            .get([block_pos.x as f64 / 100.0, block_pos.z as f64 / 100.0]);
+        let height = noise * 16.0 + 64.0;
+        block_pos.y as f64 <= height
     }
 }

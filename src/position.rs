@@ -36,29 +36,52 @@ impl BlockPos {
     }
 
     pub fn chunk_pos(&self) -> (ChunkPos, (usize, usize, usize)) {
-        let (chunk_x, block_x) = (self.x / CHUNK_SIZE, self.x.rem_euclid(CHUNK_SIZE));
-        let (chunk_y, block_y) = (self.y / CHUNK_SIZE, self.y.rem_euclid(CHUNK_SIZE));
-        let (chunk_z, block_z) = (self.z / CHUNK_SIZE, self.z.rem_euclid(CHUNK_SIZE));
+        let (chunk_x, block_x) = (
+            div_floor(self.x, CHUNK_SIZE as i32),
+            self.x.rem_euclid(CHUNK_SIZE as i32),
+        );
+        let (chunk_y, block_y) = (
+            div_floor(self.y, CHUNK_SIZE as i32),
+            self.y.rem_euclid(CHUNK_SIZE as i32),
+        );
+        let (chunk_z, block_z) = (
+            div_floor(self.z, CHUNK_SIZE as i32),
+            self.z.rem_euclid(CHUNK_SIZE as i32),
+        );
         (
             ChunkPos::new(chunk_x, chunk_y, chunk_z),
-            (block_x, block_y, block_z),
+            (block_x as usize, block_y as usize, block_z as usize),
         )
+    }
+}
+
+fn div_floor(a: i32, b: i32) -> i32 {
+    if a >= 0 || a % b == 0 {
+        a / b
+    } else {
+        a / b - 1
     }
 }
 
 impl From<ChunkPos> for BlockPos {
     fn from(value: ChunkPos) -> Self {
         Self::new(
-            value.x * CHUNK_SIZE,
-            value.y * CHUNK_SIZE,
-            value.z * CHUNK_SIZE,
+            value.x * CHUNK_SIZE as i32,
+            value.y * CHUNK_SIZE as i32,
+            value.z * CHUNK_SIZE as i32,
         )
     }
 }
 
 impl From<BlockPos> for Vec3 {
     fn from(value: BlockPos) -> Self {
-        Self::new(value.x, value.y, value.z)
+        Self::new(value.x as f32, value.y as f32, value.z as f32)
+    }
+}
+
+impl From<Vec3> for BlockPos {
+    fn from(value: Vec3) -> Self {
+        Self::new(value.x as i32, value.y as i32, value.z as i32)
     }
 }
 
@@ -97,11 +120,11 @@ impl ChunkPos {
 
     pub fn center(&self) -> Vec3 {
         let block_pos = BlockPos::from(self.clone());
-        let add = CHUNK_SIZE / 2;
+        let add = CHUNK_SIZE as i32 / 2;
         Vec3::new(
-            (block_pos.x + add),
-            (block_pos.y + add),
-            (block_pos.z + add),
+            (block_pos.x + add) as f32,
+            (block_pos.y + add) as f32,
+            (block_pos.z + add) as f32,
         )
     }
 }
@@ -109,5 +132,34 @@ impl ChunkPos {
 impl From<ChunkPos> for Vec3 {
     fn from(value: ChunkPos) -> Self {
         BlockPos::from(value).into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_chunk_pos() {
+        assert_eq!(
+            BlockPos::new(0, 0, 0).chunk_pos(),
+            (ChunkPos::new(0, 0, 0), (0, 0, 0))
+        );
+        assert_eq!(
+            BlockPos::new(5, 0, 0).chunk_pos(),
+            (ChunkPos::new(0, 0, 0), (5, 0, 0))
+        );
+        assert_eq!(
+            BlockPos::new(31, 0, 0).chunk_pos(),
+            (ChunkPos::new(0, 0, 0), (31, 0, 0))
+        );
+        assert_eq!(
+            BlockPos::new(32, 0, 0).chunk_pos(),
+            (ChunkPos::new(1, 0, 0), (0, 0, 0))
+        );
+        assert_eq!(
+            BlockPos::new(-1, 0, 0).chunk_pos(),
+            (ChunkPos::new(-1, 0, 0), (31, 0, 0))
+        );
     }
 }

@@ -25,7 +25,7 @@ struct ChunkDistance(usize);
 
 impl Default for ChunkDistance {
     fn default() -> Self {
-        Self(4)
+        Self(6)
     }
 }
 
@@ -85,29 +85,30 @@ fn load_chunks(
     server: Res<AssetServer>,
 ) {
     let handle = server.load("dirt.png");
-    let distance = max_distance.0;
-    let block_distance = (distance * CHUNK_SIZE);
+    let block_distance = (max_distance.0 * CHUNK_SIZE) as f32;
     let transform = player.single();
+
     let player_chunk_pos = BlockPos::new(
-        transform.translation.x.floor(),
-        transform.translation.y.floor(),
-        transform.translation.z.floor(),
+        transform.translation.x as i32,
+        transform.translation.y as i32,
+        transform.translation.z as i32,
     )
     .chunk_pos()
     .0;
-    let player_chunk_center = player_chunk_pos.center();
+    let player_center_pos = player_chunk_pos.center();
+
+    let distance = max_distance.0 as i32;
 
     for x in -distance..=distance {
         for y in -distance..=distance {
             for z in -distance..=distance {
                 let chunk_pos = player_chunk_pos.clone() + ChunkPos::new(x, y, z);
-                let center_pos = chunk_pos.center();
 
                 if level.is_loaded(&chunk_pos) {
                     continue;
                 }
 
-                if player_chunk_center.distance(center_pos) <= block_distance {
+                if player_center_pos.distance(chunk_pos.center()) <= block_distance {
                     level.load_chunk(&chunk_pos);
 
                     let material = StandardMaterial {
@@ -121,9 +122,9 @@ fn load_chunks(
                         chunk_pos.clone(),
                         materials.add(material),
                         TransformBundle::from_transform(Transform::from_xyz(
-                            (chunk_pos.x * CHUNK_SIZE),
-                            (chunk_pos.y * CHUNK_SIZE),
-                            (chunk_pos.z * CHUNK_SIZE),
+                            (chunk_pos.x * CHUNK_SIZE as i32) as f32,
+                            (chunk_pos.y * CHUNK_SIZE as i32) as f32,
+                            (chunk_pos.z * CHUNK_SIZE as i32) as f32,
                         )),
                         VisibilityBundle::default(),
                         Friction::new(0.25),
@@ -141,11 +142,19 @@ fn unload_chunks(
     chunks: Query<(Entity, &ChunkPos)>,
     player: Query<&Transform, With<Player>>,
 ) {
-    let max_distance = (max_distance.0 * CHUNK_SIZE);
+    let max_distance = (max_distance.0 * CHUNK_SIZE) as f32;
     let transform = player.single();
+    let player_chunk_pos = BlockPos::new(
+        transform.translation.x as i32,
+        transform.translation.y as i32,
+        transform.translation.z as i32,
+    )
+    .chunk_pos()
+    .0;
+    let player_center_pos = player_chunk_pos.center();
 
     for (chunk, chunk_pos) in chunks.iter() {
-        if transform.translation.distance(chunk_pos.center()) > max_distance {
+        if player_center_pos.distance(chunk_pos.center()) > max_distance {
             commands.entity(chunk).despawn_recursive();
             level.unload_chunk(chunk_pos);
         }
@@ -180,14 +189,15 @@ fn build_chunk(level: &Level, chunk_pos: &ChunkPos) -> (Mesh, Option<Collider>) 
     for x in 0..CHUNK_SIZE {
         for y in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
-                let block_pos = BlockPos::from(chunk_pos.clone()) + BlockPos::new(x, y, z);
+                let block_pos =
+                    BlockPos::from(chunk_pos.clone()) + BlockPos::new(x as i32, y as i32, z as i32);
                 let block = level.block(&block_pos);
 
                 if matches!(block, None | Some(false)) {
                     continue;
                 }
 
-                let translation = Vec3::new(x, y, z);
+                let translation = Vec3::new(x as f32, y as f32, z as f32);
                 BasicBlock::render(level, &mut chunk_builder, &block_pos, translation);
             }
         }
