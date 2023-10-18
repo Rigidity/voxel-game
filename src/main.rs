@@ -6,8 +6,8 @@ use bevy::{core_pipeline::experimental::taa::TemporalAntiAliasPlugin, prelude::*
 use bevy_fps_counter::FpsCounterPlugin;
 use bevy_rapier3d::prelude::*;
 
-use block::{BasicBlock, Block};
-use chunk::{Dirty, CHUNK_SIZE};
+use block::{AdjacentBlocks, BasicBlock, Block};
+use chunk::{Chunk, Dirty, CHUNK_SIZE};
 use chunk_builder::ChunkBuilder;
 use level::Level;
 use player::{Player, PlayerPlugin};
@@ -104,7 +104,7 @@ fn load_chunks(
             for z in -distance..=distance {
                 let chunk_pos = player_chunk_pos.clone() + ChunkPos::new(x, y, z);
 
-                if level.is_loaded(&chunk_pos) {
+                if level.get_chunk(&chunk_pos).is_some() {
                     continue;
                 }
 
@@ -168,37 +168,84 @@ fn generate_meshes(
     query: Query<(Entity, &ChunkPos), Or<(With<Dirty>, Without<Handle<Mesh>>)>>,
 ) {
     for (entity, chunk_pos) in query.iter() {
-        if !level.is_loaded(chunk_pos) {
-            continue;
-        }
+        if let Some(chunk) = level.get_chunk(chunk_pos) {
+            if let Some(mut entity) = commands.get_entity(entity) {
+                let (mesh, collider) = build_chunk(&level, chunk_pos, chunk);
 
-        if let Some(mut entity) = commands.get_entity(entity) {
-            let (mesh, collider) = build_chunk(&level, chunk_pos);
+                entity.remove::<Dirty>().insert(meshes.add(mesh));
 
-            entity.remove::<Dirty>().insert(meshes.add(mesh));
-
-            if let Some(collider) = collider {
-                entity.insert(collider);
+                if let Some(collider) = collider {
+                    entity.insert(collider);
+                }
             }
         }
     }
 }
 
-fn build_chunk(level: &Level, chunk_pos: &ChunkPos) -> (Mesh, Option<Collider>) {
+fn build_chunk(level: &Level, chunk_pos: &ChunkPos, chunk: &Chunk) -> (Mesh, Option<Collider>) {
     let mut chunk_builder = ChunkBuilder::new();
+
     for x in 0..CHUNK_SIZE {
         for y in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
-                let block_pos =
-                    BlockPos::from(chunk_pos.clone()) + BlockPos::new(x as i32, y as i32, z as i32);
-                let block = level.block(&block_pos);
-
-                if matches!(block, None | Some(false)) {
+                if !chunk.block_relative(x, y, z) {
                     continue;
                 }
 
+                let adjacent = AdjacentBlocks {
+                    left: if x == 0 {
+                        level
+                            .get_chunk(&(chunk_pos.clone() - ChunkPos::X))
+                            .map(|adjacent| adjacent.block_relative(CHUNK_SIZE - 1, y, z))
+                            .unwrap_or(false)
+                    } else {
+                        chunk.block_relative(x - 1, y, z)
+                    },
+                    right: if x == CHUNK_SIZE - 1 {
+                        level
+                            .get_chunk(&(chunk_pos.clone() + ChunkPos::X))
+                            .map(|adjacent| adjacent.block_relative(0, y, z))
+                            .unwrap_or(false)
+                    } else {
+                        chunk.block_relative(x + 1, y, z)
+                    },
+                    bottom: if y == 0 {
+                        level
+                            .get_chunk(&(chunk_pos.clone() - ChunkPos::Y))
+                            .map(|adjacent| adjacent.block_relative(x, CHUNK_SIZE - 1, z))
+                            .unwrap_or(false)
+                    } else {
+                        chunk.block_relative(x, y - 1, z)
+                    },
+                    top: if y == CHUNK_SIZE - 1 {
+                        level
+                            .get_chunk(&(chunk_pos.clone() + ChunkPos::Y))
+                            .map(|adjacent| adjacent.block_relative(x, 0, z))
+                            .unwrap_or(false)
+                    } else {
+                        chunk.block_relative(x, y + 1, z)
+                    },
+                    back: if z == 0 {
+                        level
+                            .get_chunk(&(chunk_pos.clone() - ChunkPos::Z))
+                            .map(|adjacent| adjacent.block_relative(x, y, CHUNK_SIZE - 1))
+                            .unwrap_or(false)
+                    } else {
+                        chunk.block_relative(x, y, z - 1)
+                    },
+                    front: if z == CHUNK_SIZE - 1 {
+                        level
+                            .get_chunk(&(chunk_pos.clone() + ChunkPos::Z))
+                            .map(|adjacent| adjacent.block_relative(x, y, 0))
+                            .unwrap_or(false)
+                    } else {
+                        chunk.block_relative(x, y, z + 1)
+                    },
+                };
+
                 let translation = Vec3::new(x as f32, y as f32, z as f32);
-                BasicBlock::render(level, &mut chunk_builder, &block_pos, translation);
+
+                BasicBlock::render(&mut chunk_builder, &adjacent, translation);
             }
         }
     }

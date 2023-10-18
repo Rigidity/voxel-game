@@ -1,41 +1,26 @@
 use bevy::prelude::Vec3;
 
-use crate::{chunk_builder::ChunkBuilder, level::Level, position::BlockPos};
+use crate::chunk_builder::ChunkBuilder;
+
+pub struct AdjacentBlocks {
+    pub left: bool,
+    pub right: bool,
+    pub top: bool,
+    pub bottom: bool,
+    pub front: bool,
+    pub back: bool,
+}
 
 pub trait Block {
-    fn render(level: &Level, chunk: &mut ChunkBuilder, block_pos: &BlockPos, translation: Vec3);
+    fn render(chunk: &mut ChunkBuilder, adjacent: &AdjacentBlocks, translation: Vec3);
 }
 
 pub struct BasicBlock;
 
 impl Block for BasicBlock {
-    fn render(
-        level: &Level,
-        chunk: &mut ChunkBuilder,
-        block_pos: &BlockPos,
-        Vec3 { x, y, z }: Vec3,
-    ) {
-        let left = level
-            .block(&(block_pos.clone() - BlockPos::X))
-            .unwrap_or_default();
-        let right = level
-            .block(&(block_pos.clone() + BlockPos::X))
-            .unwrap_or_default();
-        let top = level
-            .block(&(block_pos.clone() + BlockPos::Y))
-            .unwrap_or_default();
-        let bottom = level
-            .block(&(block_pos.clone() - BlockPos::Y))
-            .unwrap_or_default();
-        let front = level
-            .block(&(block_pos.clone() + BlockPos::Z))
-            .unwrap_or_default();
-        let back = level
-            .block(&(block_pos.clone() - BlockPos::Z))
-            .unwrap_or_default();
-
+    fn render(chunk: &mut ChunkBuilder, adjacent: &AdjacentBlocks, Vec3 { x, y, z }: Vec3) {
         // Left
-        if !left {
+        if !adjacent.left {
             let a = chunk.vertex([x - 0.5, y - 0.5, z - 0.5], [-1.0, 0.0, 0.0], [0.0, 0.0]);
             let b = chunk.vertex([x - 0.5, y + 0.5, z - 0.5], [-1.0, 0.0, 0.0], [0.0, 1.0]);
             let c = chunk.vertex([x - 0.5, y + 0.5, z + 0.5], [-1.0, 0.0, 0.0], [1.0, 1.0]);
@@ -44,7 +29,7 @@ impl Block for BasicBlock {
         }
 
         // Right
-        if !right {
+        if !adjacent.right {
             let a = chunk.vertex([x + 0.5, y - 0.5, z - 0.5], [1.0, 0.0, 0.0], [0.0, 0.0]);
             let b = chunk.vertex([x + 0.5, y + 0.5, z - 0.5], [1.0, 0.0, 0.0], [0.0, 1.0]);
             let c = chunk.vertex([x + 0.5, y + 0.5, z + 0.5], [1.0, 0.0, 0.0], [1.0, 1.0]);
@@ -53,7 +38,7 @@ impl Block for BasicBlock {
         }
 
         // Top
-        if !top {
+        if !adjacent.top {
             let a = chunk.vertex([x - 0.5, y + 0.5, z - 0.5], [0.0, 1.0, 0.0], [0.0, 0.0]);
             let b = chunk.vertex([x + 0.5, y + 0.5, z - 0.5], [0.0, 1.0, 0.0], [0.0, 1.0]);
             let c = chunk.vertex([x + 0.5, y + 0.5, z + 0.5], [0.0, 1.0, 0.0], [1.0, 1.0]);
@@ -62,7 +47,7 @@ impl Block for BasicBlock {
         }
 
         // Bottom
-        if !bottom {
+        if !adjacent.bottom {
             let a = chunk.vertex([x - 0.5, y - 0.5, z - 0.5], [0.0, -1.0, 0.0], [0.0, 0.0]);
             let b = chunk.vertex([x + 0.5, y - 0.5, z - 0.5], [0.0, -1.0, 0.0], [0.0, 1.0]);
             let c = chunk.vertex([x + 0.5, y - 0.5, z + 0.5], [0.0, -1.0, 0.0], [1.0, 1.0]);
@@ -71,7 +56,7 @@ impl Block for BasicBlock {
         }
 
         // Front
-        if !front {
+        if !adjacent.front {
             let a = chunk.vertex([x - 0.5, y - 0.5, z + 0.5], [0.0, 0.0, 1.0], [0.0, 0.0]);
             let b = chunk.vertex([x + 0.5, y - 0.5, z + 0.5], [0.0, 0.0, 1.0], [0.0, 1.0]);
             let c = chunk.vertex([x + 0.5, y + 0.5, z + 0.5], [0.0, 0.0, 1.0], [1.0, 1.0]);
@@ -80,7 +65,7 @@ impl Block for BasicBlock {
         }
 
         // Back
-        if !back {
+        if !adjacent.back {
             let a = chunk.vertex([x - 0.5, y - 0.5, z - 0.5], [0.0, 0.0, -1.0], [0.0, 0.0]);
             let b = chunk.vertex([x + 0.5, y - 0.5, z - 0.5], [0.0, 0.0, -1.0], [0.0, 1.0]);
             let c = chunk.vertex([x + 0.5, y + 0.5, z - 0.5], [0.0, 0.0, -1.0], [1.0, 1.0]);

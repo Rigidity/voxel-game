@@ -3,7 +3,7 @@ use noise::{NoiseFn, Perlin};
 
 use crate::{
     chunk::{Chunk, CHUNK_SIZE},
-    position::{BlockPos, ChunkPos},
+    position::ChunkPos,
 };
 
 #[derive(Default, Resource)]
@@ -14,7 +14,7 @@ pub struct Level {
 
 impl Level {
     pub fn load_chunk(&mut self, position: &ChunkPos) -> &Chunk {
-        if !self.is_loaded(position) {
+        if self.get_chunk(position).is_none() {
             let chunk = self.generate_chunk(position);
             self.loaded_chunks.insert(position.clone(), chunk);
         }
@@ -25,39 +25,27 @@ impl Level {
         self.loaded_chunks.remove(position);
     }
 
-    pub fn is_loaded(&self, position: &ChunkPos) -> bool {
-        self.loaded_chunks.contains_key(position)
-    }
-
-    pub fn block(&self, position: &BlockPos) -> Option<bool> {
-        let (chunk_pos, (x, y, z)) = position.chunk_pos();
-
-        self.loaded_chunks
-            .get(&chunk_pos)
-            .map(|chunk| chunk.block_relative(x, y, z))
+    pub fn get_chunk(&self, position: &ChunkPos) -> Option<&Chunk> {
+        self.loaded_chunks.get(position)
     }
 
     fn generate_chunk(&mut self, chunk_pos: &ChunkPos) -> Chunk {
         let mut chunk = Chunk::default();
         for x in 0..CHUNK_SIZE {
-            for y in 0..CHUNK_SIZE {
-                for z in 0..CHUNK_SIZE {
-                    let block_pos = BlockPos::from(chunk_pos.clone())
-                        + BlockPos::new(x as i32, y as i32, z as i32);
-                    if self.generate_block(&block_pos) {
+            for z in 0..CHUNK_SIZE {
+                let block_x = chunk_pos.x * CHUNK_SIZE as i32 + x as i32;
+                let block_z = chunk_pos.z * CHUNK_SIZE as i32 + z as i32;
+                let noise = self
+                    .noise
+                    .get([block_x as f64 / 70.0, block_z as f64 / 70.0]);
+                for y in 0..CHUNK_SIZE {
+                    let block_y = chunk_pos.y * CHUNK_SIZE as i32 + y as i32;
+                    if block_y as f64 <= noise * 10.0 {
                         *chunk.block_relative_mut(x, y, z) = true;
                     }
                 }
             }
         }
         chunk
-    }
-
-    fn generate_block(&self, block_pos: &BlockPos) -> bool {
-        let noise = self
-            .noise
-            .get([block_pos.x as f64 / 100.0, block_pos.z as f64 / 100.0]);
-        let height = noise * 16.0 + 64.0;
-        block_pos.y as f64 <= height
     }
 }
