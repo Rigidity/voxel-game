@@ -14,7 +14,7 @@ pub struct Level {
 
 impl Level {
     pub fn load_chunk(&mut self, position: &ChunkPos) -> &Chunk {
-        if self.get_chunk(position).is_none() {
+        if self.chunk(position).is_none() {
             let chunk = self.generate_chunk(position);
             self.loaded_chunks.insert(position.clone(), chunk);
         }
@@ -25,8 +25,12 @@ impl Level {
         self.loaded_chunks.remove(position);
     }
 
-    pub fn get_chunk(&self, position: &ChunkPos) -> Option<&Chunk> {
+    pub fn chunk(&self, position: &ChunkPos) -> Option<&Chunk> {
         self.loaded_chunks.get(position)
+    }
+
+    pub fn chunk_mut(&mut self, position: &ChunkPos) -> Option<&mut Chunk> {
+        self.loaded_chunks.get_mut(position)
     }
 
     fn generate_chunk(&mut self, chunk_pos: &ChunkPos) -> Chunk {

@@ -10,7 +10,11 @@ use bevy::{
 };
 use bevy_rapier3d::prelude::*;
 
-use crate::chunk::CHUNK_SIZE;
+use crate::{
+    chunk::{Dirty, CHUNK_SIZE},
+    level::Level,
+    position::{BlockPos, ChunkPos},
+};
 
 #[derive(Component)]
 pub struct Player;
@@ -71,7 +75,15 @@ impl Plugin for PlayerPlugin {
             .init_resource::<MovementSpeed>()
             .init_resource::<MovementControls>()
             .add_systems(Startup, (setup_player, setup_input))
-            .add_systems(Update, (toggle_grab, player_look, player_move));
+            .add_systems(
+                Update,
+                (
+                    toggle_grab,
+                    player_look,
+                    player_move,
+                    remove_block.after(apply_deferred),
+                ),
+            );
     }
 }
 
@@ -79,7 +91,7 @@ fn setup_player(mut commands: Commands) {
     commands
         .spawn(Player)
         .insert(TransformBundle::default())
-        .insert(Collider::capsule(Vec3::ZERO, Vec3::Y * 1.8, 0.45))
+        .insert(Collider::capsule(Vec3::ZERO, Vec3::Y * 0.9, 0.45))
         .insert(RigidBody::Dynamic)
         .insert(LockedAxes::ROTATION_LOCKED)
         .insert(Velocity::default())
@@ -108,6 +120,74 @@ fn setup_player(mut commands: Commands) {
         });
 }
 
+fn remove_block(
+    mut level: ResMut<Level>,
+    mut gizmos: Gizmos,
+    mut commands: Commands,
+    rapier_context: Res<RapierContext>,
+    mouse: Res<Input<MouseButton>>,
+    camera: Query<&GlobalTransform, With<PlayerCamera>>,
+    chunk_query: Query<(Entity, &ChunkPos)>,
+) {
+    let transform = camera.single();
+
+    let filter = QueryFilter::exclude_dynamic();
+
+    if let Some((_, intersection)) = rapier_context.cast_ray_and_get_normal(
+        transform.translation(),
+        transform.forward(),
+        Real::from(4.0),
+        true,
+        filter,
+    ) {
+        gizmos.ray(transform.translation(), transform.forward(), Color::WHITE);
+        gizmos.sphere(intersection.point, Quat::default(), 0.1, Color::RED);
+    }
+
+    if mouse.just_pressed(MouseButton::Left) {
+        if let Some((entity, intersection)) = rapier_context.cast_ray_and_get_normal(
+            transform.translation(),
+            transform.forward(),
+            Real::from(4.0),
+            true,
+            filter,
+        ) {
+            if let Ok((_, chunk_pos)) = chunk_query.get(entity) {
+                if let Some(chunk) = level.chunk_mut(chunk_pos) {
+                    let (x, y, z) = (
+                        intersection.point.x.floor() as i32 - chunk_pos.x * CHUNK_SIZE as i32,
+                        intersection.point.y.floor() as i32 - chunk_pos.y * CHUNK_SIZE as i32,
+                        intersection.point.z.floor() as i32 - chunk_pos.z * CHUNK_SIZE as i32,
+                    );
+                    let (x, y, z) = (x as usize, y as usize, z as usize);
+
+                    dbg!(x, y, z);
+
+                    let bound = 0..CHUNK_SIZE;
+                    if bound.contains(&x) && bound.contains(&y) && bound.contains(&z) {
+                        *chunk.block_relative_mut(x, y, z) = false;
+                    }
+
+                    commands.entity(entity).insert(Dirty);
+
+                    for adjacent in [
+                        chunk_pos.clone() - ChunkPos::X,
+                        chunk_pos.clone() + ChunkPos::X,
+                        chunk_pos.clone() - ChunkPos::Y,
+                        chunk_pos.clone() + ChunkPos::Y,
+                        chunk_pos.clone() - ChunkPos::Z,
+                        chunk_pos.clone() + ChunkPos::Z,
+                    ] {
+                        if let Some((entity, _)) = chunk_query.iter().find(|e| e.1 == &adjacent) {
+                            commands.entity(entity).insert(Dirty);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn player_look(
     primary_window: Query<&Window, With<PrimaryWindow>>,
     motion: Res<Events<MouseMotion>>,
@@ -115,12 +195,12 @@ fn player_look(
     mut state: ResMut<InputState>,
     mut camera: Query<&mut Transform, With<PlayerCamera>>,
 ) {
-    let window = primary_window.get_single().unwrap();
+    let window = primary_window.single();
     if window.cursor.grab_mode == CursorGrabMode::None {
         return;
     };
 
-    let mut transform = camera.get_single_mut().unwrap();
+    let mut transform = camera.single_mut();
 
     for ev in state.reader_motion.iter(&motion) {
         let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
@@ -144,13 +224,13 @@ fn player_move(
     camera: Query<&Transform, With<PlayerCamera>>,
     mut player: Query<&mut Velocity, With<Player>>,
 ) {
-    let window = primary_window.get_single().unwrap();
+    let window = primary_window.single();
     if window.cursor.grab_mode == CursorGrabMode::None {
         return;
     };
 
-    let transform = camera.get_single().unwrap();
-    let mut velocity = player.get_single_mut().unwrap();
+    let transform = camera.single();
+    let mut velocity = player.single_mut();
 
     let mut movement = Vec3::ZERO;
     let local_z = transform.local_z();

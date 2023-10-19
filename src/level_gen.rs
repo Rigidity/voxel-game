@@ -1,6 +1,7 @@
 use async_io::block_on;
 use bevy::{
     prelude::*,
+    render::primitives::Aabb,
     tasks::{AsyncComputeTaskPool, Task},
 };
 use bevy_rapier3d::prelude::*;
@@ -70,7 +71,7 @@ fn load_chunks(
             for z in -distance..=distance {
                 let chunk_pos = player_chunk_pos.clone() + ChunkPos::new(x, y, z);
 
-                if level.get_chunk(&chunk_pos).is_some() {
+                if level.chunk(&chunk_pos).is_some() {
                     continue;
                 }
 
@@ -138,10 +139,12 @@ fn insert_meshes(
             let mut entity = commands.entity(entity);
 
             entity.remove::<MeshTask>();
-            entity.insert(meshes.add(mesh));
+            entity.insert(meshes.add(mesh)).remove::<Aabb>();
 
             if let Some(collider) = collider {
                 entity.insert(collider);
+            } else {
+                entity.remove::<Collider>();
             }
         }
     }
@@ -155,7 +158,7 @@ fn generate_meshes(
     let thread_pool = AsyncComputeTaskPool::get();
 
     for (entity, chunk_pos) in query.iter() {
-        let Some(chunk) = level.get_chunk(chunk_pos) else {
+        let Some(chunk) = level.chunk(chunk_pos) else {
             continue;
         };
 
@@ -164,7 +167,7 @@ fn generate_meshes(
         };
 
         let left = level
-            .get_chunk(&(chunk_pos.clone() - ChunkPos::X))
+            .chunk(&(chunk_pos.clone() - ChunkPos::X))
             .map(|chunk| {
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (y, data) in data.iter_mut().enumerate() {
@@ -176,7 +179,7 @@ fn generate_meshes(
             });
 
         let right = level
-            .get_chunk(&(chunk_pos.clone() + ChunkPos::X))
+            .chunk(&(chunk_pos.clone() + ChunkPos::X))
             .map(|chunk| {
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (y, data) in data.iter_mut().enumerate() {
@@ -188,7 +191,7 @@ fn generate_meshes(
             });
 
         let top = level
-            .get_chunk(&(chunk_pos.clone() + ChunkPos::Y))
+            .chunk(&(chunk_pos.clone() + ChunkPos::Y))
             .map(|chunk| {
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
@@ -200,7 +203,7 @@ fn generate_meshes(
             });
 
         let bottom = level
-            .get_chunk(&(chunk_pos.clone() - ChunkPos::Y))
+            .chunk(&(chunk_pos.clone() - ChunkPos::Y))
             .map(|chunk| {
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
@@ -212,7 +215,7 @@ fn generate_meshes(
             });
 
         let front = level
-            .get_chunk(&(chunk_pos.clone() + ChunkPos::Z))
+            .chunk(&(chunk_pos.clone() + ChunkPos::Z))
             .map(|chunk| {
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
@@ -224,7 +227,7 @@ fn generate_meshes(
             });
 
         let back = level
-            .get_chunk(&(chunk_pos.clone() - ChunkPos::Z))
+            .chunk(&(chunk_pos.clone() - ChunkPos::Z))
             .map(|chunk| {
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
