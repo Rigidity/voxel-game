@@ -30,17 +30,15 @@ pub struct LevelGenPlugin;
 
 impl Plugin for LevelGenPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<ChunkDistance>()
-            .add_systems(
-                Update,
-                (
-                    (load_chunks, unload_chunks),
-                    apply_deferred,
-                    (generate_meshes, insert_meshes),
-                )
-                    .chain(),
+        app.init_resource::<ChunkDistance>().add_systems(
+            Update,
+            (
+                (load_chunks, unload_chunks),
+                apply_deferred,
+                (generate_meshes, insert_meshes),
             )
-            .run();
+                .chain(),
+        );
     }
 }
 

@@ -7,6 +7,7 @@ use bevy_fps_counter::FpsCounterPlugin;
 use bevy_rapier3d::prelude::*;
 
 use level::Level;
+use level_gen::LevelGenPlugin;
 use player::PlayerPlugin;
 
 mod block;
@@ -31,6 +32,7 @@ fn main() {
             RapierPhysicsPlugin::<NoUserData>::default(),
             FpsCounterPlugin,
             PlayerPlugin,
+            LevelGenPlugin,
         ))
         .insert_resource(RapierConfiguration {
             gravity: Vec3::Y * -9.81 * 3.0,
