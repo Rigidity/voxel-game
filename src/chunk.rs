@@ -5,6 +5,7 @@ pub struct Dirty;
 
 pub const CHUNK_SIZE: usize = 32;
 
+#[derive(Clone)]
 pub struct Chunk {
     blocks: [[[bool; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE],
 }

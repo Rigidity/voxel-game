@@ -37,10 +37,10 @@ impl Level {
                 let block_z = chunk_pos.z * CHUNK_SIZE as i32 + z as i32;
                 let noise = self
                     .noise
-                    .get([block_x as f64 / 70.0, block_z as f64 / 70.0]);
+                    .get([block_x as f64 / 90.0, block_z as f64 / 90.0]);
                 for y in 0..CHUNK_SIZE {
                     let block_y = chunk_pos.y * CHUNK_SIZE as i32 + y as i32;
-                    if block_y as f64 <= noise * 10.0 {
+                    if block_y as f64 <= noise * 18.0 {
                         *chunk.block_relative_mut(x, y, z) = true;
                     }
                 }

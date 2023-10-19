@@ -2,7 +2,6 @@ use bevy::{
     prelude::Mesh,
     render::{mesh, render_resource::PrimitiveTopology},
 };
-use bevy_rapier3d::prelude::{Collider, ComputedColliderShape};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Index(u32);
@@ -32,19 +31,12 @@ impl ChunkBuilder {
         self.indices.extend(index.into_iter().map(|index| index.0));
     }
 
-    pub fn build(self) -> (Mesh, Option<Collider>) {
-        let build_collider = !self.indices.is_empty();
-
+    pub fn build(self) -> Mesh {
         let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, self.positions);
         mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, self.normals);
         mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, self.texcoords);
         mesh.set_indices(Some(mesh::Indices::U32(self.indices)));
-
-        let collider = build_collider
-            .then(|| Collider::from_bevy_mesh(&mesh, &ComputedColliderShape::TriMesh))
-            .flatten();
-
-        (mesh, collider)
+        mesh
     }
 }
