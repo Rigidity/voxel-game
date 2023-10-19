@@ -10,6 +10,8 @@ use bevy::{
 };
 use bevy_rapier3d::prelude::*;
 
+use crate::chunk::CHUNK_SIZE;
+
 #[derive(Component)]
 pub struct Player;
 
@@ -86,16 +88,24 @@ fn setup_player(mut commands: Commands) {
         .with_children(|commands| {
             commands
                 .spawn(PlayerCamera)
+                .insert(ScreenSpaceAmbientOcclusionBundle::default())
+                .insert(TemporalAntiAliasBundle::default())
+                .insert(FogSettings {
+                    falloff: FogFalloff::Linear {
+                        start: (CHUNK_SIZE * 6) as f32,
+                        end: (CHUNK_SIZE * 8) as f32,
+                    },
+                    ..default()
+                })
                 .insert(Camera3dBundle {
                     transform: Transform::from_xyz(0.0, 1.0, 0.0),
                     projection: Projection::Perspective(PerspectiveProjection {
                         fov: FRAC_PI_2,
+                        far: 0.0,
                         ..default()
                     }),
                     ..default()
-                })
-                .insert(ScreenSpaceAmbientOcclusionBundle::default())
-                .insert(TemporalAntiAliasBundle::default());
+                });
         });
 }
 
