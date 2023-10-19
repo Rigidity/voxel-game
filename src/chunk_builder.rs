@@ -1,6 +1,12 @@
 use bevy::{
-    prelude::Mesh,
+    prelude::*,
     render::{mesh, render_resource::PrimitiveTopology},
+};
+use bevy_rapier3d::prelude::*;
+
+use crate::{
+    block::{AdjacentBlocks, BasicBlock, Block},
+    chunk::{Chunk, CHUNK_SIZE},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -39,4 +45,73 @@ impl ChunkBuilder {
         mesh.set_indices(Some(mesh::Indices::U32(self.indices)));
         mesh
     }
+}
+
+pub struct AdjacentChunkData {
+    pub left: Option<[[bool; CHUNK_SIZE]; CHUNK_SIZE]>,
+    pub right: Option<[[bool; CHUNK_SIZE]; CHUNK_SIZE]>,
+    pub top: Option<[[bool; CHUNK_SIZE]; CHUNK_SIZE]>,
+    pub bottom: Option<[[bool; CHUNK_SIZE]; CHUNK_SIZE]>,
+    pub front: Option<[[bool; CHUNK_SIZE]; CHUNK_SIZE]>,
+    pub back: Option<[[bool; CHUNK_SIZE]; CHUNK_SIZE]>,
+}
+
+pub fn build_chunk(adjacent: AdjacentChunkData, chunk: Chunk) -> (Mesh, Option<Collider>) {
+    let mut chunk_builder = ChunkBuilder::new();
+
+    for x in 0..CHUNK_SIZE {
+        for y in 0..CHUNK_SIZE {
+            for z in 0..CHUNK_SIZE {
+                if !chunk.block_relative(x, y, z) {
+                    continue;
+                }
+
+                let adjacent_sides = AdjacentBlocks {
+                    left: if x == 0 {
+                        adjacent.left.map(|data| data[y][z]).unwrap_or(false)
+                    } else {
+                        chunk.block_relative(x - 1, y, z)
+                    },
+                    right: if x == CHUNK_SIZE - 1 {
+                        adjacent.right.map(|data| data[y][z]).unwrap_or(false)
+                    } else {
+                        chunk.block_relative(x + 1, y, z)
+                    },
+                    bottom: if y == 0 {
+                        adjacent.bottom.map(|data| data[x][z]).unwrap_or(false)
+                    } else {
+                        chunk.block_relative(x, y - 1, z)
+                    },
+                    top: if y == CHUNK_SIZE - 1 {
+                        adjacent.top.map(|data| data[x][z]).unwrap_or(false)
+                    } else {
+                        chunk.block_relative(x, y + 1, z)
+                    },
+                    back: if z == 0 {
+                        adjacent.back.map(|data| data[x][y]).unwrap_or(false)
+                    } else {
+                        chunk.block_relative(x, y, z - 1)
+                    },
+                    front: if z == CHUNK_SIZE - 1 {
+                        adjacent.front.map(|data| data[x][y]).unwrap_or(false)
+                    } else {
+                        chunk.block_relative(x, y, z + 1)
+                    },
+                };
+
+                let translation = Vec3::new(x as f32, y as f32, z as f32);
+
+                BasicBlock::render(&mut chunk_builder, adjacent_sides, translation);
+            }
+        }
+    }
+
+    let mesh = chunk_builder.build();
+    let mut collider = None;
+
+    if mesh.count_vertices() > 0 {
+        collider = Collider::from_bevy_mesh(&mesh, &ComputedColliderShape::TriMesh);
+    }
+
+    (mesh, collider)
 }
