@@ -101,7 +101,6 @@ fn setup_player(mut commands: Commands) {
                     transform: Transform::from_xyz(0.0, 1.0, 0.0),
                     projection: Projection::Perspective(PerspectiveProjection {
                         fov: FRAC_PI_2,
-                        far: 0.0,
                         ..default()
                     }),
                     ..default()
