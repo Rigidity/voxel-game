@@ -3,7 +3,7 @@ use noise::{NoiseFn, Perlin};
 
 use crate::{
     chunk::{Chunk, CHUNK_SIZE},
-    position::ChunkPos,
+    position::{BlockPos, ChunkPos},
 };
 
 #[derive(Default, Resource)]
@@ -31,6 +31,18 @@ impl Level {
 
     pub fn chunk_mut(&mut self, position: &ChunkPos) -> Option<&mut Chunk> {
         self.loaded_chunks.get_mut(position)
+    }
+
+    pub fn loaded_block(&self, position: &BlockPos) -> Option<bool> {
+        let (chunk_pos, (x, y, z)) = position.chunk_pos();
+        self.chunk(&chunk_pos)
+            .map(|chunk| chunk.block_relative(x, y, z))
+    }
+
+    pub fn loaded_block_mut(&mut self, position: &BlockPos) -> Option<&mut bool> {
+        let (chunk_pos, (x, y, z)) = position.chunk_pos();
+        self.chunk_mut(&chunk_pos)
+            .map(|chunk| chunk.block_relative_mut(x, y, z))
     }
 
     fn generate_chunk(&mut self, chunk_pos: &ChunkPos) -> Chunk {

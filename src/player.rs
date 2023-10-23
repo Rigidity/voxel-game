@@ -122,70 +122,101 @@ fn setup_player(mut commands: Commands) {
 
 fn remove_block(
     mut level: ResMut<Level>,
-    mut gizmos: Gizmos,
     mut commands: Commands,
-    rapier_context: Res<RapierContext>,
+    mut gizmos: Gizmos,
     mouse: Res<Input<MouseButton>>,
     camera: Query<&GlobalTransform, With<PlayerCamera>>,
     chunk_query: Query<(Entity, &ChunkPos)>,
 ) {
     let transform = camera.single();
 
-    let filter = QueryFilter::exclude_dynamic();
+    if let Ok((x, y, z)) = raycast_blocks(&level, transform.translation(), transform.forward(), 6) {
+        if mouse.just_pressed(MouseButton::Left) {
+            let (chunk_pos, _) = BlockPos::new(x, y, z).chunk_pos();
 
-    if let Some((_, intersection)) = rapier_context.cast_ray_and_get_normal(
-        transform.translation(),
-        transform.forward(),
-        Real::from(4.0),
-        true,
-        filter,
-    ) {
-        gizmos.ray(transform.translation(), transform.forward(), Color::WHITE);
-        gizmos.sphere(intersection.point, Quat::default(), 0.1, Color::RED);
-    }
+            if let Some(block) = level.loaded_block_mut(&BlockPos::new(x, y, z)) {
+                *block = false;
+            }
 
-    if mouse.just_pressed(MouseButton::Left) {
-        if let Some((entity, intersection)) = rapier_context.cast_ray_and_get_normal(
-            transform.translation(),
-            transform.forward(),
-            Real::from(4.0),
-            true,
-            filter,
-        ) {
-            if let Ok((_, chunk_pos)) = chunk_query.get(entity) {
-                if let Some(chunk) = level.chunk_mut(chunk_pos) {
-                    let (x, y, z) = (
-                        intersection.point.x.floor() as i32 - chunk_pos.x * CHUNK_SIZE as i32,
-                        intersection.point.y.floor() as i32 - chunk_pos.y * CHUNK_SIZE as i32,
-                        intersection.point.z.floor() as i32 - chunk_pos.z * CHUNK_SIZE as i32,
-                    );
-                    let (x, y, z) = (x as usize, y as usize, z as usize);
+            if let Some(entity) = chunk_query
+                .iter()
+                .find(|entity| entity.1 == &chunk_pos)
+                .map(|entity| entity.0)
+            {
+                commands.entity(entity).insert(Dirty);
 
-                    dbg!(x, y, z);
-
-                    let bound = 0..CHUNK_SIZE;
-                    if bound.contains(&x) && bound.contains(&y) && bound.contains(&z) {
-                        *chunk.block_relative_mut(x, y, z) = false;
-                    }
-
-                    commands.entity(entity).insert(Dirty);
-
-                    for adjacent in [
-                        chunk_pos.clone() - ChunkPos::X,
-                        chunk_pos.clone() + ChunkPos::X,
-                        chunk_pos.clone() - ChunkPos::Y,
-                        chunk_pos.clone() + ChunkPos::Y,
-                        chunk_pos.clone() - ChunkPos::Z,
-                        chunk_pos.clone() + ChunkPos::Z,
-                    ] {
-                        if let Some((entity, _)) = chunk_query.iter().find(|e| e.1 == &adjacent) {
-                            commands.entity(entity).insert(Dirty);
-                        }
+                for adjacent in [
+                    chunk_pos.clone() - ChunkPos::X,
+                    chunk_pos.clone() + ChunkPos::X,
+                    chunk_pos.clone() - ChunkPos::Y,
+                    chunk_pos.clone() + ChunkPos::Y,
+                    chunk_pos.clone() - ChunkPos::Z,
+                    chunk_pos.clone() + ChunkPos::Z,
+                ] {
+                    if let Some((entity, _)) = chunk_query.iter().find(|e| e.1 == &adjacent) {
+                        commands.entity(entity).insert(Dirty);
                     }
                 }
             }
         }
+
+        gizmos.cuboid(
+            Transform::from_xyz(x as f32 + 0.5, y as f32 + 0.5, z as f32 + 0.5)
+                .with_scale(Vec3::ONE),
+            Color::BLACK,
+        );
     }
+}
+
+fn raycast_blocks(
+    level: &Level,
+    start: Vec3,
+    direction: Vec3,
+    max_distance: i32,
+) -> Result<(i32, i32, i32), (i32, i32, i32)> {
+    // Start position in the grid
+    let mut x = start.x.floor() as i32;
+    let mut y = start.y.floor() as i32;
+    let mut z = start.z.floor() as i32;
+
+    // Determine the step direction (1 or -1) for x, y, z
+    let step_x = if direction.x >= 0.0 { 1 } else { -1 };
+    let step_y = if direction.y >= 0.0 { 1 } else { -1 };
+    let step_z = if direction.z >= 0.0 { 1 } else { -1 };
+
+    // How far along the ray must we move for each component
+    // to cross a block boundary?
+    let delta_x = (1.0 / direction.x).abs();
+    let delta_y = (1.0 / direction.y).abs();
+    let delta_z = (1.0 / direction.z).abs();
+
+    // Initial values
+    let mut t_next_x = delta_x;
+    let mut t_next_y = delta_y;
+    let mut t_next_z = delta_z;
+
+    // Traverse the grid up to max_distance
+    for _ in 0..max_distance {
+        // Check for a block at the current position
+        if level.loaded_block(&BlockPos::new(x, y, z)) == Some(true) {
+            return Ok((x, y, z));
+        }
+
+        // Move ray to the next nearest block boundary in x, y, or z
+        if t_next_x < t_next_y && t_next_x < t_next_z {
+            x += step_x;
+            t_next_x += delta_x;
+        } else if t_next_y < t_next_z {
+            y += step_y;
+            t_next_y += delta_y;
+        } else {
+            z += step_z;
+            t_next_z += delta_z;
+        }
+    }
+
+    // Ray didn't hit any block within max_distance
+    Err((x, y, z))
 }
 
 fn player_look(
