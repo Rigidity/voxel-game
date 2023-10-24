@@ -13,7 +13,9 @@ pub struct AdjacentBlocks {
 }
 
 pub trait Block {
-    fn render(chunk: &mut ChunkBuilder, adjacent: AdjacentBlocks, translation: Vec3);
+    fn render(chunk: &mut ChunkBuilder, adjacent: AdjacentBlocks, translation: Vec3)
+    where
+        Self: Sized;
 }
 
 pub struct BasicBlock;

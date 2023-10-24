@@ -11,6 +11,7 @@ bevy_rapier3d = "0.22.0"
 derive_more = "0.99.17"
 futures-lite = "1.13.0"
 noise = "0.8.2"
+bevy_mod_mipmap_generator = { git = "https://github.com/DGriffin91/bevy_mod_mipmap_generator" }
 
 [profile.dev]
 opt-level = 1

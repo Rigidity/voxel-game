@@ -81,7 +81,7 @@ fn load_chunks(
                     let material = StandardMaterial {
                         base_color_texture: Some(handle.clone()),
                         perceptual_roughness: 1.0,
-                        reflectance: 0.25,
+                        reflectance: 0.2,
                         ..default()
                     };
 

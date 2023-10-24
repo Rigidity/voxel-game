@@ -4,6 +4,7 @@ use std::f32::consts::FRAC_PI_2;
 
 use bevy::{core_pipeline::experimental::taa::TemporalAntiAliasPlugin, prelude::*};
 use bevy_fps_counter::FpsCounterPlugin;
+use bevy_mod_mipmap_generator::{generate_mipmaps, MipmapGeneratorPlugin, MipmapGeneratorSettings};
 use bevy_rapier3d::prelude::*;
 
 use level::Level;
@@ -26,8 +27,14 @@ fn main() {
             brightness: 1.0,
             ..default()
         })
+        .insert_resource(MipmapGeneratorSettings {
+            anisotropic_filtering: 1,
+            ..default()
+        })
+        .insert_resource(Msaa::Sample8)
         .add_plugins((
             DefaultPlugins.set(ImagePlugin::default_nearest()),
+            MipmapGeneratorPlugin,
             TemporalAntiAliasPlugin,
             RapierPhysicsPlugin::<NoUserData>::default(),
             FpsCounterPlugin,
@@ -39,6 +46,7 @@ fn main() {
             ..default()
         })
         .add_systems(Startup, setup_world)
+        .add_systems(Update, generate_mipmaps::<StandardMaterial>)
         .run();
 }
 
