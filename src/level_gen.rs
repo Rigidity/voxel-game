@@ -172,7 +172,7 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (y, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = chunk.block_relative(CHUNK_SIZE - 1, y, z);
+                        *data = chunk.block_relative(CHUNK_SIZE - 1, y, z).is_some();
                     }
                 }
                 data
@@ -184,7 +184,7 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (y, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = chunk.block_relative(0, y, z);
+                        *data = chunk.block_relative(0, y, z).is_some();
                     }
                 }
                 data
@@ -196,7 +196,7 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = chunk.block_relative(x, 0, z);
+                        *data = chunk.block_relative(x, 0, z).is_some();
                     }
                 }
                 data
@@ -208,7 +208,7 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = chunk.block_relative(x, CHUNK_SIZE - 1, z);
+                        *data = chunk.block_relative(x, CHUNK_SIZE - 1, z).is_some();
                     }
                 }
                 data
@@ -220,7 +220,7 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (y, data) in data.iter_mut().enumerate() {
-                        *data = chunk.block_relative(x, y, 0);
+                        *data = chunk.block_relative(x, y, 0).is_some();
                     }
                 }
                 data
@@ -232,7 +232,7 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (y, data) in data.iter_mut().enumerate() {
-                        *data = chunk.block_relative(x, y, CHUNK_SIZE - 1);
+                        *data = chunk.block_relative(x, y, CHUNK_SIZE - 1).is_some();
                     }
                 }
                 data

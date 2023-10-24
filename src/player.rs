@@ -135,7 +135,7 @@ fn remove_block(
             let (chunk_pos, _) = BlockPos::new(x, y, z).chunk_pos();
 
             if let Some(block) = level.loaded_block_mut(&BlockPos::new(x, y, z)) {
-                *block = false;
+                *block = None;
             }
 
             if let Some(entity) = chunk_query
@@ -198,7 +198,7 @@ fn raycast_blocks(
     // Traverse the grid up to max_distance
     for _ in 0..max_distance {
         // Check for a block at the current position
-        if level.loaded_block(&BlockPos::new(x, y, z)) == Some(true) {
+        if level.loaded_block(&BlockPos::new(x, y, z)).is_some() {
             return Ok((x, y, z));
         }
 

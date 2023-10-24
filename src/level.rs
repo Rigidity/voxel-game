@@ -2,6 +2,7 @@ use bevy::{prelude::Resource, utils::HashMap};
 use noise::{NoiseFn, Perlin};
 
 use crate::{
+    block::{Block, DirtBlock},
     chunk::{Chunk, CHUNK_SIZE},
     position::{BlockPos, ChunkPos},
 };
@@ -33,13 +34,13 @@ impl Level {
         self.loaded_chunks.get_mut(position)
     }
 
-    pub fn loaded_block(&self, position: &BlockPos) -> Option<bool> {
+    pub fn loaded_block(&self, position: &BlockPos) -> Option<Option<Box<dyn Block>>> {
         let (chunk_pos, (x, y, z)) = position.chunk_pos();
         self.chunk(&chunk_pos)
             .map(|chunk| chunk.block_relative(x, y, z))
     }
 
-    pub fn loaded_block_mut(&mut self, position: &BlockPos) -> Option<&mut bool> {
+    pub fn loaded_block_mut(&mut self, position: &BlockPos) -> Option<&mut Option<Box<dyn Block>>> {
         let (chunk_pos, (x, y, z)) = position.chunk_pos();
         self.chunk_mut(&chunk_pos)
             .map(|chunk| chunk.block_relative_mut(x, y, z))
@@ -63,7 +64,7 @@ impl Level {
                     //     && block_z >= -4
                     //     && !(block_x == 0 && block_z == 0 && block_y % 300 == 0))
                     {
-                        *chunk.block_relative_mut(x, y, z) = true;
+                        *chunk.block_relative_mut(x, y, z) = Some(Box::new(DirtBlock));
                     }
                 }
             }
