@@ -1,10 +1,11 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use async_io::block_on;
 use bevy::{
     prelude::*,
     render::primitives::Aabb,
     tasks::{AsyncComputeTaskPool, Task},
+    utils::Instant,
 };
 use bevy_rapier3d::prelude::*;
 use futures_lite::future;
@@ -53,6 +54,7 @@ fn load_chunks(
     player: Query<&Transform, With<Player>>,
     server: Res<AssetServer>,
 ) {
+    let mut d = Duration::default();
     let handle = server.load("blocks/dirt.png");
     let block_distance = (max_distance.0 * CHUNK_SIZE) as f32;
     let transform = player.single();
@@ -78,7 +80,9 @@ fn load_chunks(
                 }
 
                 if player_center_pos.distance(chunk_pos.center()) <= block_distance {
+                    let i = Instant::now();
                     level.load_chunk(&chunk_pos);
+                    d += i.elapsed();
 
                     let material = StandardMaterial {
                         base_color_texture: Some(handle.clone()),
@@ -103,6 +107,7 @@ fn load_chunks(
             }
         }
     }
+    println!("{:?}", d);
 }
 
 fn unload_chunks(
