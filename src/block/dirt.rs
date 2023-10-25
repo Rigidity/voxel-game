@@ -3,12 +3,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::chunk_builder::{AdjacentBlocks, ChunkBuilder};
 
-use super::Block;
+use super::BlockType;
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct DirtBlock;
 
-impl Block for DirtBlock {
+impl BlockType for DirtBlock {
     fn render(&self, chunk: &mut ChunkBuilder, adjacent: AdjacentBlocks, Vec3 { x, y, z }: Vec3) {
         // Left
         if !adjacent.left {

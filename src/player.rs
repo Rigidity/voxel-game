@@ -11,6 +11,7 @@ use bevy::{
 use bevy_rapier3d::prelude::*;
 
 use crate::{
+    block::Block,
     chunk::{Dirty, CHUNK_SIZE},
     level::Level,
     position::{BlockPos, ChunkPos},
@@ -137,7 +138,7 @@ fn remove_block(
                 return;
             };
 
-            *chunk.write().unwrap().block_relative_mut(rx, ry, rz) = None;
+            *chunk.write().unwrap().block_relative_mut(rx, ry, rz) = Block::Empty;
 
             if let Some(entity) = chunk_query
                 .iter()
@@ -201,7 +202,12 @@ fn raycast_blocks(
         // Check for a block at the current position
         let (chunk_pos, (rx, ry, rz)) = BlockPos::new(x, y, z).chunk_pos();
         if let Some(chunk) = level.chunk(&chunk_pos).map(Arc::clone) {
-            if chunk.read().unwrap().block_relative(rx, ry, rz).is_some() {
+            if chunk
+                .read()
+                .unwrap()
+                .block_relative(rx, ry, rz)
+                .is_not_empty()
+            {
                 return Ok((x, y, z));
             }
         };

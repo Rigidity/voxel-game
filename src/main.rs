@@ -7,6 +7,8 @@ use bevy_fps_counter::FpsCounterPlugin;
 use bevy_mod_mipmap_generator::{generate_mipmaps, MipmapGeneratorPlugin, MipmapGeneratorSettings};
 use bevy_rapier3d::prelude::*;
 
+use block::DirtBlock;
+use block_registry::BlockRegistry;
 use level::Level;
 use level_gen::LevelGenPlugin;
 use player::PlayerPlugin;
@@ -22,6 +24,7 @@ mod position;
 
 fn main() {
     App::new()
+        .init_resource::<BlockRegistry>()
         .init_resource::<Level>()
         .insert_resource(ClearColor(Color::rgb(0.2, 0.5, 0.8)))
         .insert_resource(AmbientLight {
@@ -46,7 +49,7 @@ fn main() {
             gravity: Vec3::Y * -9.81 * 3.0,
             ..default()
         })
-        .add_systems(Startup, setup_world)
+        .add_systems(Startup, (setup_world, register_blocks))
         .add_systems(Update, generate_mipmaps::<StandardMaterial>)
         .run();
 }
@@ -64,4 +67,8 @@ fn setup_world(mut commands: Commands) {
         },
         ..default()
     });
+}
+
+fn register_blocks(mut registry: ResMut<BlockRegistry>) {
+    registry.register::<DirtBlock>("dirt".to_string());
 }

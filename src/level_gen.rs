@@ -1,17 +1,19 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::{Arc, RwLock};
 
 use async_io::block_on;
 use bevy::{
     prelude::*,
     render::primitives::Aabb,
     tasks::{AsyncComputeTaskPool, Task},
-    utils::Instant,
 };
 use bevy_rapier3d::prelude::*;
 use futures_lite::future;
+use noise::NoiseFn;
 
 use crate::{
-    chunk::{Dirty, CHUNK_SIZE},
+    block::Block,
+    block_registry::BlockRegistry,
+    chunk::{Chunk, Dirty, CHUNK_SIZE},
     chunk_builder::{build_chunk, AdjacentChunkData},
     level::Level,
     player::Player,
@@ -50,11 +52,12 @@ fn load_chunks(
     mut commands: Commands,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut level: ResMut<Level>,
+    registry: Res<BlockRegistry>,
     max_distance: Res<ChunkDistance>,
     player: Query<&Transform, With<Player>>,
     server: Res<AssetServer>,
 ) {
-    let mut d = Duration::default();
+    let dirt = registry.id("dirt");
     let handle = server.load("blocks/dirt.png");
     let block_distance = (max_distance.0 * CHUNK_SIZE) as f32;
     let transform = player.single();
@@ -80,9 +83,25 @@ fn load_chunks(
                 }
 
                 if player_center_pos.distance(chunk_pos.center()) <= block_distance {
-                    let i = Instant::now();
-                    level.load_chunk(&chunk_pos);
-                    d += i.elapsed();
+                    if !level.is_loaded(&chunk_pos) {
+                        let mut chunk = Chunk::default();
+                        for x in 0..CHUNK_SIZE {
+                            for z in 0..CHUNK_SIZE {
+                                let block_x = chunk_pos.x * CHUNK_SIZE as i32 + x as i32;
+                                let block_z = chunk_pos.z * CHUNK_SIZE as i32 + z as i32;
+                                let noise = level
+                                    .noise()
+                                    .get([block_x as f64 / 90.0, block_z as f64 / 90.0]);
+                                for y in 0..CHUNK_SIZE {
+                                    let block_y = chunk_pos.y * CHUNK_SIZE as i32 + y as i32;
+                                    if block_y as f64 <= noise * 18.0 {
+                                        *chunk.block_relative_mut(x, y, z) = Block::Id(dirt);
+                                    }
+                                }
+                            }
+                        }
+                        level.add_chunk(&chunk_pos, Arc::new(RwLock::new(chunk)));
+                    }
 
                     let material = StandardMaterial {
                         base_color_texture: Some(handle.clone()),
@@ -107,7 +126,6 @@ fn load_chunks(
             }
         }
     }
-    println!("{:?}", d);
 }
 
 fn unload_chunks(
@@ -131,7 +149,7 @@ fn unload_chunks(
     for (chunk, chunk_pos) in chunks.iter() {
         if player_center_pos.distance(chunk_pos.center()) > max_distance {
             commands.entity(chunk).despawn_recursive();
-            level.unload_chunk(chunk_pos);
+            level.remove_chunk(chunk_pos);
         }
     }
 }
@@ -159,6 +177,7 @@ fn insert_meshes(
 
 fn generate_meshes(
     mut commands: Commands,
+    registry: Res<BlockRegistry>,
     level: Res<Level>,
     query: Query<(Entity, &ChunkPos), With<Dirty>>,
 ) {
@@ -181,7 +200,7 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (y, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = lock.block_relative(CHUNK_SIZE - 1, y, z).is_some();
+                        *data = lock.block_relative(CHUNK_SIZE - 1, y, z).is_not_empty();
                     }
                 }
                 data
@@ -195,7 +214,7 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (y, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = lock.block_relative(0, y, z).is_some();
+                        *data = lock.block_relative(0, y, z).is_not_empty();
                     }
                 }
                 data
@@ -209,7 +228,7 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = lock.block_relative(x, 0, z).is_some();
+                        *data = lock.block_relative(x, 0, z).is_not_empty();
                     }
                 }
                 data
@@ -223,7 +242,7 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = lock.block_relative(x, CHUNK_SIZE - 1, z).is_some();
+                        *data = lock.block_relative(x, CHUNK_SIZE - 1, z).is_not_empty();
                     }
                 }
                 data
@@ -237,7 +256,7 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (y, data) in data.iter_mut().enumerate() {
-                        *data = lock.block_relative(x, y, 0).is_some();
+                        *data = lock.block_relative(x, y, 0).is_not_empty();
                     }
                 }
                 data
@@ -251,7 +270,7 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (y, data) in data.iter_mut().enumerate() {
-                        *data = lock.block_relative(x, y, CHUNK_SIZE - 1).is_some();
+                        *data = lock.block_relative(x, y, CHUNK_SIZE - 1).is_not_empty();
                     }
                 }
                 data
@@ -266,8 +285,9 @@ fn generate_meshes(
             back,
         };
 
-        let task =
-            thread_pool.spawn(async move { build_chunk(adjacent, chunk.clone().read().unwrap()) });
+        let ids = registry.ids();
+        let task = thread_pool
+            .spawn(async move { build_chunk(adjacent, chunk.clone().read().unwrap(), ids) });
 
         entity.remove::<Dirty>().insert(MeshTask(task));
     }

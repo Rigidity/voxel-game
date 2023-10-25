@@ -1,46 +1,50 @@
+use std::sync::Arc;
+
 use bevy::{prelude::Resource, utils::HashMap};
 use serde::de::DeserializeOwned;
 
-use crate::block::Block;
+use crate::block::BlockType;
 
-pub type BlockData = Box<dyn Block>;
-pub type DeserializeFn = fn(&[u8]) -> Result<BlockData, bincode::Error>;
-pub type DefaultFn = fn() -> BlockData;
+pub type DeserializeFn = fn(&[u8]) -> Result<Box<dyn BlockType>, bincode::Error>;
 
-pub struct BlockType {
+pub struct BlockInfo {
     deserialize: DeserializeFn,
-    default: DefaultFn,
+    default: Arc<dyn BlockType>,
 }
 
-impl BlockType {
-    pub fn deserialize(&self, bytes: &[u8]) -> Result<BlockData, bincode::Error> {
-        (self.deserialize)(bytes)
-    }
-
-    pub fn default(&self) -> BlockData {
-        (self.default)()
-    }
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct BlockId(pub usize);
 
 #[derive(Resource, Default)]
 pub struct BlockRegistry {
-    block_types: HashMap<String, BlockType>,
+    block_types: HashMap<String, BlockId>,
+    block_ids: Vec<BlockInfo>,
 }
 
 impl BlockRegistry {
     pub fn register<T>(&mut self, name: String)
     where
-        T: Block + DeserializeOwned + Default + 'static,
+        T: BlockType + DeserializeOwned + Default + 'static,
     {
-        self.block_types.insert(
-            name,
-            BlockType {
-                deserialize: |bytes| {
-                    let lamp: T = bincode::deserialize(bytes)?;
-                    Ok(Box::new(lamp))
-                },
-                default: || Box::new(T::default()),
+        let id = BlockId(self.block_types.len());
+        self.block_ids.push(BlockInfo {
+            deserialize: |bytes| {
+                let lamp: T = bincode::deserialize(bytes)?;
+                Ok(Box::new(lamp))
             },
-        );
+            default: Arc::new(T::default()),
+        });
+        self.block_types.insert(name, id);
+    }
+
+    pub fn id(&self, name: &str) -> BlockId {
+        self.block_types[name]
+    }
+
+    pub fn ids(&self) -> Vec<Arc<dyn BlockType>> {
+        self.block_ids
+            .iter()
+            .map(|info| info.default.clone())
+            .collect()
     }
 }

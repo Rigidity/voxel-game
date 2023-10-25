@@ -1,4 +1,4 @@
-use std::sync::RwLockReadGuard;
+use std::sync::{Arc, RwLockReadGuard};
 
 use bevy::{
     prelude::*,
@@ -6,7 +6,10 @@ use bevy::{
 };
 use bevy_rapier3d::prelude::*;
 
-use crate::chunk::{Chunk, CHUNK_SIZE};
+use crate::{
+    block::{Block, BlockType},
+    chunk::{Chunk, CHUNK_SIZE},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Index(u32);
@@ -68,52 +71,62 @@ pub struct AdjacentChunkData {
 pub fn build_chunk(
     adjacent: AdjacentChunkData,
     chunk: RwLockReadGuard<Chunk>,
+    ids: Vec<Arc<dyn BlockType>>,
 ) -> (Mesh, Option<Collider>) {
     let mut chunk_builder = ChunkBuilder::new();
 
     for x in 0..CHUNK_SIZE {
         for y in 0..CHUNK_SIZE {
             for z in 0..CHUNK_SIZE {
-                let Some(block) = chunk.block_relative(x, y, z) else {
+                let block = chunk.block_relative(x, y, z);
+                if block.is_empty() {
                     continue;
-                };
+                }
 
                 let adjacent_sides = AdjacentBlocks {
                     left: if x == 0 {
                         adjacent.left.map(|data| data[y][z]).unwrap_or(false)
                     } else {
-                        chunk.block_relative(x - 1, y, z).is_some()
+                        chunk.block_relative(x - 1, y, z).is_not_empty()
                     },
                     right: if x == CHUNK_SIZE - 1 {
                         adjacent.right.map(|data| data[y][z]).unwrap_or(false)
                     } else {
-                        chunk.block_relative(x + 1, y, z).is_some()
+                        chunk.block_relative(x + 1, y, z).is_not_empty()
                     },
                     bottom: if y == 0 {
                         adjacent.bottom.map(|data| data[x][z]).unwrap_or(false)
                     } else {
-                        chunk.block_relative(x, y - 1, z).is_some()
+                        chunk.block_relative(x, y - 1, z).is_not_empty()
                     },
                     top: if y == CHUNK_SIZE - 1 {
                         adjacent.top.map(|data| data[x][z]).unwrap_or(false)
                     } else {
-                        chunk.block_relative(x, y + 1, z).is_some()
+                        chunk.block_relative(x, y + 1, z).is_not_empty()
                     },
                     back: if z == 0 {
                         adjacent.back.map(|data| data[x][y]).unwrap_or(false)
                     } else {
-                        chunk.block_relative(x, y, z - 1).is_some()
+                        chunk.block_relative(x, y, z - 1).is_not_empty()
                     },
                     front: if z == CHUNK_SIZE - 1 {
                         adjacent.front.map(|data| data[x][y]).unwrap_or(false)
                     } else {
-                        chunk.block_relative(x, y, z + 1).is_some()
+                        chunk.block_relative(x, y, z + 1).is_not_empty()
                     },
                 };
 
                 let translation = Vec3::new(x as f32, y as f32, z as f32);
 
-                block.render(&mut chunk_builder, adjacent_sides, translation);
+                match block {
+                    Block::Data(data) => {
+                        data.render(&mut chunk_builder, adjacent_sides, translation)
+                    }
+                    Block::Id(id) => {
+                        ids[id.0].render(&mut chunk_builder, adjacent_sides, translation);
+                    }
+                    _ => {}
+                }
             }
         }
     }
