@@ -1,23 +1,26 @@
+use std::sync::{Arc, Mutex};
+
 use bevy::{prelude::Resource, utils::HashMap};
 use noise::{NoiseFn, Perlin};
 
 use crate::{
-    block::{Block, DirtBlock},
+    block::DirtBlock,
     chunk::{Chunk, CHUNK_SIZE},
-    position::{BlockPos, ChunkPos},
+    position::ChunkPos,
 };
 
 #[derive(Default, Resource)]
 pub struct Level {
-    loaded_chunks: HashMap<ChunkPos, Chunk>,
+    loaded_chunks: HashMap<ChunkPos, Arc<Mutex<Chunk>>>,
     noise: Perlin,
 }
 
 impl Level {
-    pub fn load_chunk(&mut self, position: &ChunkPos) -> &Chunk {
+    pub fn load_chunk(&mut self, position: &ChunkPos) -> &Arc<Mutex<Chunk>> {
         if self.chunk(position).is_none() {
             let chunk = self.generate_chunk(position);
-            self.loaded_chunks.insert(position.clone(), chunk);
+            self.loaded_chunks
+                .insert(position.clone(), Arc::new(Mutex::new(chunk)));
         }
         &self.loaded_chunks[position]
     }
@@ -26,24 +29,8 @@ impl Level {
         self.loaded_chunks.remove(position);
     }
 
-    pub fn chunk(&self, position: &ChunkPos) -> Option<&Chunk> {
+    pub fn chunk(&self, position: &ChunkPos) -> Option<&Arc<Mutex<Chunk>>> {
         self.loaded_chunks.get(position)
-    }
-
-    pub fn chunk_mut(&mut self, position: &ChunkPos) -> Option<&mut Chunk> {
-        self.loaded_chunks.get_mut(position)
-    }
-
-    pub fn loaded_block(&self, position: &BlockPos) -> Option<Option<Box<dyn Block>>> {
-        let (chunk_pos, (x, y, z)) = position.chunk_pos();
-        self.chunk(&chunk_pos)
-            .map(|chunk| chunk.block_relative(x, y, z))
-    }
-
-    pub fn loaded_block_mut(&mut self, position: &BlockPos) -> Option<&mut Option<Box<dyn Block>>> {
-        let (chunk_pos, (x, y, z)) = position.chunk_pos();
-        self.chunk_mut(&chunk_pos)
-            .map(|chunk| chunk.block_relative_mut(x, y, z))
     }
 
     fn generate_chunk(&mut self, chunk_pos: &ChunkPos) -> Chunk {

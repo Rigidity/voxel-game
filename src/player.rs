@@ -1,4 +1,4 @@
-use std::f32::consts::FRAC_PI_2;
+use std::{f32::consts::FRAC_PI_2, sync::Arc};
 
 use bevy::{
     core_pipeline::experimental::taa::TemporalAntiAliasBundle,
@@ -121,7 +121,7 @@ fn setup_player(mut commands: Commands) {
 }
 
 fn remove_block(
-    mut level: ResMut<Level>,
+    level: Res<Level>,
     mut commands: Commands,
     mut gizmos: Gizmos,
     mouse: Res<Input<MouseButton>>,
@@ -132,11 +132,12 @@ fn remove_block(
 
     if let Ok((x, y, z)) = raycast_blocks(&level, transform.translation(), transform.forward(), 6) {
         if mouse.just_pressed(MouseButton::Left) {
-            let (chunk_pos, _) = BlockPos::new(x, y, z).chunk_pos();
+            let (chunk_pos, (rx, ry, rz)) = BlockPos::new(x, y, z).chunk_pos();
+            let Some(chunk) = level.chunk(&chunk_pos).map(Arc::clone) else {
+                return;
+            };
 
-            if let Some(block) = level.loaded_block_mut(&BlockPos::new(x, y, z)) {
-                *block = None;
-            }
+            *chunk.lock().unwrap().block_relative_mut(rx, ry, rz) = None;
 
             if let Some(entity) = chunk_query
                 .iter()
@@ -198,9 +199,12 @@ fn raycast_blocks(
     // Traverse the grid up to max_distance
     for _ in 0..max_distance {
         // Check for a block at the current position
-        if level.loaded_block(&BlockPos::new(x, y, z)).is_some() {
-            return Ok((x, y, z));
-        }
+        let (chunk_pos, (rx, ry, rz)) = BlockPos::new(x, y, z).chunk_pos();
+        if let Some(chunk) = level.chunk(&chunk_pos).map(Arc::clone) {
+            if chunk.lock().unwrap().block_relative(rx, ry, rz).is_some() {
+                return Ok((x, y, z));
+            }
+        };
 
         // Move ray to the next nearest block boundary in x, y, or z
         if t_next_x < t_next_y && t_next_x < t_next_z {

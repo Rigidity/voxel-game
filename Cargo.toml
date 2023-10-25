@@ -12,6 +12,9 @@ derive_more = "0.99.17"
 futures-lite = "1.13.0"
 noise = "0.8.2"
 bevy_mod_mipmap_generator = { git = "https://github.com/DGriffin91/bevy_mod_mipmap_generator" }
+erased-serde = "0.3.31"
+serde = { version = "1.0.189", features = ["derive"] }
+bincode = "1.3.3"
 
 [profile.dev]
 opt-level = 1

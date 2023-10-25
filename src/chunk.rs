@@ -2,16 +2,15 @@ use std::array;
 
 use bevy::prelude::Component;
 
-use crate::block::Block;
+use crate::block_registry::BlockData;
 
 #[derive(Component)]
 pub struct Dirty;
 
 pub const CHUNK_SIZE: usize = 32;
 
-#[derive(Clone)]
 pub struct Chunk {
-    blocks: [[[Option<Box<dyn Block>>; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE],
+    blocks: [[[Option<BlockData>; CHUNK_SIZE]; CHUNK_SIZE]; CHUNK_SIZE],
 }
 
 impl Default for Chunk {
@@ -23,16 +22,11 @@ impl Default for Chunk {
 }
 
 impl Chunk {
-    pub fn block_relative(&self, x: usize, y: usize, z: usize) -> Option<Box<dyn Block>> {
-        self.blocks[x][y][z]
+    pub fn block_relative(&self, x: usize, y: usize, z: usize) -> &Option<BlockData> {
+        &self.blocks[x][y][z]
     }
 
-    pub fn block_relative_mut(
-        &mut self,
-        x: usize,
-        y: usize,
-        z: usize,
-    ) -> &mut Option<Box<dyn Block>> {
+    pub fn block_relative_mut(&mut self, x: usize, y: usize, z: usize) -> &mut Option<BlockData> {
         &mut self.blocks[x][y][z]
     }
 }

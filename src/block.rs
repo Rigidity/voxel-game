@@ -1,19 +1,13 @@
 mod dirt;
 
+use bevy::prelude::Vec3;
 pub use dirt::*;
+use erased_serde::serialize_trait_object;
 
-use crate::model::Model;
+use crate::chunk_builder::{AdjacentBlocks, ChunkBuilder};
 
-#[derive(Debug, Clone, Copy)]
-pub struct AdjacentBlocks {
-    pub left: bool,
-    pub right: bool,
-    pub top: bool,
-    pub bottom: bool,
-    pub front: bool,
-    pub back: bool,
+pub trait Block: erased_serde::Serialize + Send + Sync {
+    fn render(&self, chunk: &mut ChunkBuilder, adjacent: AdjacentBlocks, translation: Vec3);
 }
 
-pub trait Block: Send + Sync {
-    fn model(&self) -> &dyn Model;
-}
+serialize_trait_object!(Block);

@@ -51,7 +51,7 @@ fn load_chunks(
     player: Query<&Transform, With<Player>>,
     server: Res<AssetServer>,
 ) {
-    let handle = server.load("dirt.png");
+    let handle = server.load("blocks/dirt.png");
     let block_distance = (max_distance.0 * CHUNK_SIZE) as f32;
     let transform = player.single();
 
@@ -172,7 +172,11 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (y, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = chunk.block_relative(CHUNK_SIZE - 1, y, z).is_some();
+                        *data = chunk
+                            .lock()
+                            .unwrap()
+                            .block_relative(CHUNK_SIZE - 1, y, z)
+                            .is_some();
                     }
                 }
                 data
@@ -184,7 +188,7 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (y, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = chunk.block_relative(0, y, z).is_some();
+                        *data = chunk.lock().unwrap().block_relative(0, y, z).is_some();
                     }
                 }
                 data
@@ -196,7 +200,7 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = chunk.block_relative(x, 0, z).is_some();
+                        *data = chunk.lock().unwrap().block_relative(x, 0, z).is_some();
                     }
                 }
                 data
@@ -208,7 +212,11 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = chunk.block_relative(x, CHUNK_SIZE - 1, z).is_some();
+                        *data = chunk
+                            .lock()
+                            .unwrap()
+                            .block_relative(x, CHUNK_SIZE - 1, z)
+                            .is_some();
                     }
                 }
                 data
@@ -220,7 +228,7 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (y, data) in data.iter_mut().enumerate() {
-                        *data = chunk.block_relative(x, y, 0).is_some();
+                        *data = chunk.lock().unwrap().block_relative(x, y, 0).is_some();
                     }
                 }
                 data
@@ -232,7 +240,11 @@ fn generate_meshes(
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (y, data) in data.iter_mut().enumerate() {
-                        *data = chunk.block_relative(x, y, CHUNK_SIZE - 1).is_some();
+                        *data = chunk
+                            .lock()
+                            .unwrap()
+                            .block_relative(x, y, CHUNK_SIZE - 1)
+                            .is_some();
                     }
                 }
                 data
@@ -248,7 +260,8 @@ fn generate_meshes(
         };
         let chunk = chunk.clone();
 
-        let task = thread_pool.spawn(async move { build_chunk(adjacent, chunk) });
+        let task =
+            thread_pool.spawn(async move { build_chunk(adjacent, chunk.clone().lock().unwrap()) });
 
         entity.remove::<Dirty>().insert(MeshTask(task));
     }

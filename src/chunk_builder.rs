@@ -1,13 +1,12 @@
+use std::sync::MutexGuard;
+
 use bevy::{
     prelude::*,
     render::{mesh, render_resource::PrimitiveTopology},
 };
 use bevy_rapier3d::prelude::*;
 
-use crate::{
-    block::AdjacentBlocks,
-    chunk::{Chunk, CHUNK_SIZE},
-};
+use crate::chunk::{Chunk, CHUNK_SIZE};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Index(u32);
@@ -18,6 +17,16 @@ pub struct ChunkBuilder {
     normals: Vec<[f32; 3]>,
     texcoords: Vec<[f32; 2]>,
     indices: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct AdjacentBlocks {
+    pub left: bool,
+    pub right: bool,
+    pub top: bool,
+    pub bottom: bool,
+    pub front: bool,
+    pub back: bool,
 }
 
 impl ChunkBuilder {
@@ -56,7 +65,10 @@ pub struct AdjacentChunkData {
     pub back: Option<[[bool; CHUNK_SIZE]; CHUNK_SIZE]>,
 }
 
-pub fn build_chunk(adjacent: AdjacentChunkData, chunk: Chunk) -> (Mesh, Option<Collider>) {
+pub fn build_chunk(
+    adjacent: AdjacentChunkData,
+    chunk: MutexGuard<Chunk>,
+) -> (Mesh, Option<Collider>) {
     let mut chunk_builder = ChunkBuilder::new();
 
     for x in 0..CHUNK_SIZE {
@@ -101,9 +113,7 @@ pub fn build_chunk(adjacent: AdjacentChunkData, chunk: Chunk) -> (Mesh, Option<C
 
                 let translation = Vec3::new(x as f32, y as f32, z as f32);
 
-                block
-                    .model()
-                    .render(&mut chunk_builder, adjacent_sides, translation);
+                block.render(&mut chunk_builder, adjacent_sides, translation);
             }
         }
     }

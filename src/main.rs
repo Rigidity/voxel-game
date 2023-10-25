@@ -12,14 +12,13 @@ use level_gen::LevelGenPlugin;
 use player::PlayerPlugin;
 
 mod block;
+mod block_registry;
 mod chunk;
 mod chunk_builder;
 mod level;
 mod level_gen;
-mod model;
 mod player;
 mod position;
-mod registry;
 
 fn main() {
     App::new()
