@@ -1,4 +1,4 @@
-use std::sync::MutexGuard;
+use std::sync::RwLockReadGuard;
 
 use bevy::{
     prelude::*,
@@ -67,7 +67,7 @@ pub struct AdjacentChunkData {
 
 pub fn build_chunk(
     adjacent: AdjacentChunkData,
-    chunk: MutexGuard<Chunk>,
+    chunk: RwLockReadGuard<Chunk>,
 ) -> (Mesh, Option<Collider>) {
     let mut chunk_builder = ChunkBuilder::new();
 

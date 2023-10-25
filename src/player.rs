@@ -137,7 +137,7 @@ fn remove_block(
                 return;
             };
 
-            *chunk.lock().unwrap().block_relative_mut(rx, ry, rz) = None;
+            *chunk.write().unwrap().block_relative_mut(rx, ry, rz) = None;
 
             if let Some(entity) = chunk_query
                 .iter()
@@ -201,7 +201,7 @@ fn raycast_blocks(
         // Check for a block at the current position
         let (chunk_pos, (rx, ry, rz)) = BlockPos::new(x, y, z).chunk_pos();
         if let Some(chunk) = level.chunk(&chunk_pos).map(Arc::clone) {
-            if chunk.lock().unwrap().block_relative(rx, ry, rz).is_some() {
+            if chunk.read().unwrap().block_relative(rx, ry, rz).is_some() {
                 return Ok((x, y, z));
             }
         };

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use async_io::block_on;
 use bevy::{
     prelude::*,
@@ -158,7 +160,7 @@ fn generate_meshes(
     let thread_pool = AsyncComputeTaskPool::get();
 
     for (entity, chunk_pos) in query.iter() {
-        let Some(chunk) = level.chunk(chunk_pos) else {
+        let Some(chunk) = level.chunk(chunk_pos).map(Arc::clone) else {
             continue;
         };
 
@@ -168,15 +170,13 @@ fn generate_meshes(
 
         let left = level
             .chunk(&(chunk_pos.clone() - ChunkPos::X))
+            .map(Arc::clone)
             .map(|chunk| {
+                let lock = chunk.read().unwrap();
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (y, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = chunk
-                            .lock()
-                            .unwrap()
-                            .block_relative(CHUNK_SIZE - 1, y, z)
-                            .is_some();
+                        *data = lock.block_relative(CHUNK_SIZE - 1, y, z).is_some();
                     }
                 }
                 data
@@ -184,11 +184,13 @@ fn generate_meshes(
 
         let right = level
             .chunk(&(chunk_pos.clone() + ChunkPos::X))
+            .map(Arc::clone)
             .map(|chunk| {
+                let lock = chunk.read().unwrap();
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (y, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = chunk.lock().unwrap().block_relative(0, y, z).is_some();
+                        *data = lock.block_relative(0, y, z).is_some();
                     }
                 }
                 data
@@ -196,11 +198,13 @@ fn generate_meshes(
 
         let top = level
             .chunk(&(chunk_pos.clone() + ChunkPos::Y))
+            .map(Arc::clone)
             .map(|chunk| {
+                let lock = chunk.read().unwrap();
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = chunk.lock().unwrap().block_relative(x, 0, z).is_some();
+                        *data = lock.block_relative(x, 0, z).is_some();
                     }
                 }
                 data
@@ -208,15 +212,13 @@ fn generate_meshes(
 
         let bottom = level
             .chunk(&(chunk_pos.clone() - ChunkPos::Y))
+            .map(Arc::clone)
             .map(|chunk| {
+                let lock = chunk.read().unwrap();
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = chunk
-                            .lock()
-                            .unwrap()
-                            .block_relative(x, CHUNK_SIZE - 1, z)
-                            .is_some();
+                        *data = lock.block_relative(x, CHUNK_SIZE - 1, z).is_some();
                     }
                 }
                 data
@@ -224,11 +226,13 @@ fn generate_meshes(
 
         let front = level
             .chunk(&(chunk_pos.clone() + ChunkPos::Z))
+            .map(Arc::clone)
             .map(|chunk| {
+                let lock = chunk.read().unwrap();
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (y, data) in data.iter_mut().enumerate() {
-                        *data = chunk.lock().unwrap().block_relative(x, y, 0).is_some();
+                        *data = lock.block_relative(x, y, 0).is_some();
                     }
                 }
                 data
@@ -236,15 +240,13 @@ fn generate_meshes(
 
         let back = level
             .chunk(&(chunk_pos.clone() - ChunkPos::Z))
+            .map(Arc::clone)
             .map(|chunk| {
+                let lock = chunk.read().unwrap();
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (y, data) in data.iter_mut().enumerate() {
-                        *data = chunk
-                            .lock()
-                            .unwrap()
-                            .block_relative(x, y, CHUNK_SIZE - 1)
-                            .is_some();
+                        *data = lock.block_relative(x, y, CHUNK_SIZE - 1).is_some();
                     }
                 }
                 data
@@ -258,10 +260,9 @@ fn generate_meshes(
             front,
             back,
         };
-        let chunk = chunk.clone();
 
         let task =
-            thread_pool.spawn(async move { build_chunk(adjacent, chunk.clone().lock().unwrap()) });
+            thread_pool.spawn(async move { build_chunk(adjacent, chunk.clone().read().unwrap()) });
 
         entity.remove::<Dirty>().insert(MeshTask(task));
     }
