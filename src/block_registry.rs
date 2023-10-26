@@ -35,6 +35,14 @@ impl BlockRegistry {
         self.names[name]
     }
 
+    pub fn name(&self, id: BlockId) -> &str {
+        self.names
+            .iter()
+            .find(|item| *item.1 == id)
+            .map(|item| item.0.as_str())
+            .unwrap()
+    }
+
     pub fn block(&self, id: BlockId) -> &Block {
         &self.blocks[id.0.get() as usize - 1]
     }

@@ -18,24 +18,24 @@ pub struct Level {
 }
 
 impl Level {
-    pub fn is_loaded(&self, position: &ChunkPos) -> bool {
-        self.loaded_chunks.contains_key(position)
+    pub fn is_loaded(&self, position: ChunkPos) -> bool {
+        self.loaded_chunks.contains_key(&position)
     }
 
-    pub fn add_chunk(&mut self, position: &ChunkPos, chunk: Chunk) {
-        self.loaded_chunks.insert(position.clone(), chunk);
+    pub fn add_chunk(&mut self, position: ChunkPos, chunk: Chunk) {
+        self.loaded_chunks.insert(position, chunk);
     }
 
     pub fn remove_chunk(&mut self, position: &ChunkPos) {
         self.loaded_chunks.remove(position);
     }
 
-    pub fn chunk(&self, position: &ChunkPos) -> Option<&Chunk> {
-        self.loaded_chunks.get(position)
+    pub fn chunk(&self, position: ChunkPos) -> Option<&Chunk> {
+        self.loaded_chunks.get(&position)
     }
 
-    pub fn chunk_mut(&mut self, position: &ChunkPos) -> Option<&mut Chunk> {
-        self.loaded_chunks.get_mut(position)
+    pub fn chunk_mut(&mut self, position: ChunkPos) -> Option<&mut Chunk> {
+        self.loaded_chunks.get_mut(&position)
     }
 
     pub fn noise(&self) -> Perlin {

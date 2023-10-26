@@ -7,6 +7,7 @@ use crate::level::CHUNK_SIZE;
     Default,
     Debug,
     Clone,
+    Copy,
     PartialEq,
     Eq,
     Hash,
@@ -35,7 +36,7 @@ impl BlockPos {
         Self { x, y, z }
     }
 
-    pub fn chunk_pos(&self) -> (ChunkPos, (usize, usize, usize)) {
+    pub fn chunk_pos(self) -> (ChunkPos, (usize, usize, usize)) {
         let (chunk_x, block_x) = (
             div_floor(self.x, CHUNK_SIZE as i32),
             self.x.rem_euclid(CHUNK_SIZE as i32),
@@ -90,6 +91,7 @@ impl From<Vec3> for BlockPos {
     Default,
     Debug,
     Clone,
+    Copy,
     PartialEq,
     Eq,
     Hash,
@@ -118,8 +120,8 @@ impl ChunkPos {
         Self { x, y, z }
     }
 
-    pub fn center(&self) -> Vec3 {
-        let block_pos = BlockPos::from(self.clone());
+    pub fn center(self) -> Vec3 {
+        let block_pos = BlockPos::from(self);
         let add = CHUNK_SIZE as i32 / 2;
         Vec3::new(
             (block_pos.x + add) as f32,

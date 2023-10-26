@@ -132,7 +132,7 @@ fn remove_block(
     if let Ok((x, y, z)) = raycast_blocks(&level, transform.translation(), transform.forward(), 6) {
         if mouse.just_pressed(MouseButton::Left) {
             let (chunk_pos, (rx, ry, rz)) = BlockPos::new(x, y, z).chunk_pos();
-            let Some(chunk) = level.chunk_mut(&chunk_pos) else {
+            let Some(chunk) = level.chunk_mut(chunk_pos) else {
                 return;
             };
 
@@ -146,12 +146,12 @@ fn remove_block(
                 commands.entity(entity).insert(Dirty);
 
                 for adjacent in [
-                    chunk_pos.clone() - ChunkPos::X,
-                    chunk_pos.clone() + ChunkPos::X,
-                    chunk_pos.clone() - ChunkPos::Y,
-                    chunk_pos.clone() + ChunkPos::Y,
-                    chunk_pos.clone() - ChunkPos::Z,
-                    chunk_pos.clone() + ChunkPos::Z,
+                    chunk_pos - ChunkPos::X,
+                    chunk_pos + ChunkPos::X,
+                    chunk_pos - ChunkPos::Y,
+                    chunk_pos + ChunkPos::Y,
+                    chunk_pos - ChunkPos::Z,
+                    chunk_pos + ChunkPos::Z,
                 ] {
                     if let Some((entity, _)) = chunk_query.iter().find(|e| e.1 == &adjacent) {
                         commands.entity(entity).insert(Dirty);
@@ -199,7 +199,7 @@ fn raycast_blocks(
     for _ in 0..max_distance {
         // Check for a block at the current position
         let (chunk_pos, (rx, ry, rz)) = BlockPos::new(x, y, z).chunk_pos();
-        if let Some(chunk) = level.chunk(&chunk_pos) {
+        if let Some(chunk) = level.chunk(chunk_pos) {
             if chunk.block(rx, ry, rz).is_some() {
                 return Ok((x, y, z));
             }
