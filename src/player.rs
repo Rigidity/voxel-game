@@ -1,4 +1,4 @@
-use std::{f32::consts::FRAC_PI_2, sync::Arc};
+use std::f32::consts::FRAC_PI_2;
 
 use bevy::{
     core_pipeline::experimental::taa::TemporalAntiAliasBundle,
@@ -11,7 +11,6 @@ use bevy::{
 use bevy_rapier3d::prelude::*;
 
 use crate::{
-    block::Block,
     chunk::{Dirty, CHUNK_SIZE},
     level::Level,
     position::{BlockPos, ChunkPos},
@@ -122,7 +121,7 @@ fn setup_player(mut commands: Commands) {
 }
 
 fn remove_block(
-    level: Res<Level>,
+    mut level: ResMut<Level>,
     mut commands: Commands,
     mut gizmos: Gizmos,
     mouse: Res<Input<MouseButton>>,
@@ -134,11 +133,11 @@ fn remove_block(
     if let Ok((x, y, z)) = raycast_blocks(&level, transform.translation(), transform.forward(), 6) {
         if mouse.just_pressed(MouseButton::Left) {
             let (chunk_pos, (rx, ry, rz)) = BlockPos::new(x, y, z).chunk_pos();
-            let Some(chunk) = level.chunk(&chunk_pos).map(Arc::clone) else {
+            let Some(chunk) = level.chunk_mut(&chunk_pos) else {
                 return;
             };
 
-            *chunk.write().unwrap().block_relative_mut(rx, ry, rz) = Block::Empty;
+            *chunk.block_mut(rx, ry, rz) = None;
 
             if let Some(entity) = chunk_query
                 .iter()
@@ -201,13 +200,8 @@ fn raycast_blocks(
     for _ in 0..max_distance {
         // Check for a block at the current position
         let (chunk_pos, (rx, ry, rz)) = BlockPos::new(x, y, z).chunk_pos();
-        if let Some(chunk) = level.chunk(&chunk_pos).map(Arc::clone) {
-            if chunk
-                .read()
-                .unwrap()
-                .block_relative(rx, ry, rz)
-                .is_not_empty()
-            {
+        if let Some(chunk) = level.chunk(&chunk_pos) {
+            if chunk.block(rx, ry, rz).is_some() {
                 return Ok((x, y, z));
             }
         };

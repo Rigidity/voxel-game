@@ -1,5 +1,3 @@
-use std::sync::{Arc, RwLock};
-
 use async_io::block_on;
 use bevy::{
     prelude::*,
@@ -11,8 +9,7 @@ use futures_lite::future;
 use noise::NoiseFn;
 
 use crate::{
-    block::Block,
-    block_registry::BlockRegistry,
+    block_registry::SharedBlockRegistry,
     chunk::{Chunk, Dirty, CHUNK_SIZE},
     chunk_builder::{build_chunk, AdjacentChunkData},
     level::Level,
@@ -22,6 +19,9 @@ use crate::{
 
 #[derive(Component)]
 pub struct MeshTask(Task<(Mesh, Option<Collider>)>);
+
+#[derive(Component)]
+pub struct GenerateTask(Task<Chunk>);
 
 #[derive(Resource)]
 struct ChunkDistance(usize);
@@ -39,7 +39,7 @@ impl Plugin for LevelGenPlugin {
         app.init_resource::<ChunkDistance>().add_systems(
             Update,
             (
-                (load_chunks, unload_chunks),
+                (generate_chunks, add_chunks, remove_chunks),
                 apply_deferred,
                 (generate_meshes, insert_meshes),
             )
@@ -48,16 +48,20 @@ impl Plugin for LevelGenPlugin {
     }
 }
 
-fn load_chunks(
+#[allow(clippy::too_many_arguments)]
+fn generate_chunks(
     mut commands: Commands,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut level: ResMut<Level>,
-    registry: Res<BlockRegistry>,
+    level: Res<Level>,
+    registry: Res<SharedBlockRegistry>,
     max_distance: Res<ChunkDistance>,
+    existing_chunks: Query<&ChunkPos>,
     player: Query<&Transform, With<Player>>,
     server: Res<AssetServer>,
 ) {
-    let dirt = registry.id("dirt");
+    let thread_pool = AsyncComputeTaskPool::get();
+
+    let dirt = registry.read().unwrap().block_id("dirt");
     let handle = server.load("blocks/dirt.png");
     let block_distance = (max_distance.0 * CHUNK_SIZE) as f32;
     let transform = player.single();
@@ -78,31 +82,14 @@ fn load_chunks(
             for z in -distance..=distance {
                 let chunk_pos = player_chunk_pos.clone() + ChunkPos::new(x, y, z);
 
-                if level.chunk(&chunk_pos).is_some() {
+                if existing_chunks
+                    .iter()
+                    .any(|existing_pos| existing_pos.clone() == chunk_pos)
+                {
                     continue;
                 }
 
                 if player_center_pos.distance(chunk_pos.center()) <= block_distance {
-                    if !level.is_loaded(&chunk_pos) {
-                        let mut chunk = Chunk::default();
-                        for x in 0..CHUNK_SIZE {
-                            for z in 0..CHUNK_SIZE {
-                                let block_x = chunk_pos.x * CHUNK_SIZE as i32 + x as i32;
-                                let block_z = chunk_pos.z * CHUNK_SIZE as i32 + z as i32;
-                                let noise = level
-                                    .noise()
-                                    .get([block_x as f64 / 90.0, block_z as f64 / 90.0]);
-                                for y in 0..CHUNK_SIZE {
-                                    let block_y = chunk_pos.y * CHUNK_SIZE as i32 + y as i32;
-                                    if block_y as f64 <= noise * 18.0 {
-                                        *chunk.block_relative_mut(x, y, z) = Block::Id(dirt);
-                                    }
-                                }
-                            }
-                        }
-                        level.add_chunk(&chunk_pos, Arc::new(RwLock::new(chunk)));
-                    }
-
                     let material = StandardMaterial {
                         base_color_texture: Some(handle.clone()),
                         perceptual_roughness: 1.0,
@@ -110,7 +97,7 @@ fn load_chunks(
                         ..default()
                     };
 
-                    commands.spawn((
+                    let mut entity = commands.spawn((
                         chunk_pos.clone(),
                         materials.add(material),
                         TransformBundle::from_transform(Transform::from_xyz(
@@ -122,13 +109,51 @@ fn load_chunks(
                         Friction::new(0.25),
                         Dirty,
                     ));
+
+                    if !level.is_loaded(&chunk_pos) {
+                        let noise = level.noise();
+                        let task = thread_pool.spawn(async move {
+                            let mut chunk = Chunk::default();
+                            for x in 0..CHUNK_SIZE {
+                                for z in 0..CHUNK_SIZE {
+                                    let block_x = chunk_pos.x * CHUNK_SIZE as i32 + x as i32;
+                                    let block_z = chunk_pos.z * CHUNK_SIZE as i32 + z as i32;
+                                    let noise =
+                                        noise.get([block_x as f64 / 90.0, block_z as f64 / 90.0]);
+                                    for y in 0..CHUNK_SIZE {
+                                        let block_y = chunk_pos.y * CHUNK_SIZE as i32 + y as i32;
+                                        if block_y as f64 <= noise * 18.0 {
+                                            *chunk.block_mut(x, y, z) = Some(dirt);
+                                        }
+                                    }
+                                }
+                            }
+                            chunk
+                        });
+
+                        entity.insert(GenerateTask(task));
+                    }
                 }
             }
         }
     }
 }
 
-fn unload_chunks(
+fn add_chunks(
+    mut commands: Commands,
+    mut level: ResMut<Level>,
+    mut query: Query<(Entity, &ChunkPos, &mut GenerateTask)>,
+) {
+    for (entity, chunk_pos, mut generate_task) in query.iter_mut() {
+        if let Some(chunk) = block_on(future::poll_once(&mut generate_task.0)) {
+            let mut entity = commands.entity(entity);
+            entity.remove::<GenerateTask>();
+            level.add_chunk(chunk_pos, chunk)
+        }
+    }
+}
+
+fn remove_chunks(
     mut commands: Commands,
     mut level: ResMut<Level>,
     max_distance: Res<ChunkDistance>,
@@ -162,7 +187,6 @@ fn insert_meshes(
     for (entity, mut mesh_task) in query.iter_mut() {
         if let Some((mesh, collider)) = block_on(future::poll_once(&mut mesh_task.0)) {
             let mut entity = commands.entity(entity);
-
             entity.remove::<MeshTask>();
             entity.insert(meshes.add(mesh)).remove::<Aabb>();
 
@@ -177,14 +201,14 @@ fn insert_meshes(
 
 fn generate_meshes(
     mut commands: Commands,
-    registry: Res<BlockRegistry>,
+    registry: Res<SharedBlockRegistry>,
     level: Res<Level>,
     query: Query<(Entity, &ChunkPos), With<Dirty>>,
 ) {
     let thread_pool = AsyncComputeTaskPool::get();
 
     for (entity, chunk_pos) in query.iter() {
-        let Some(chunk) = level.chunk(chunk_pos).map(Arc::clone) else {
+        let Some(chunk) = level.chunk(chunk_pos).cloned() else {
             continue;
         };
 
@@ -194,13 +218,11 @@ fn generate_meshes(
 
         let left = level
             .chunk(&(chunk_pos.clone() - ChunkPos::X))
-            .map(Arc::clone)
             .map(|chunk| {
-                let lock = chunk.read().unwrap();
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (y, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = lock.block_relative(CHUNK_SIZE - 1, y, z).is_not_empty();
+                        *data = chunk.block(CHUNK_SIZE - 1, y, z).is_some();
                     }
                 }
                 data
@@ -208,13 +230,11 @@ fn generate_meshes(
 
         let right = level
             .chunk(&(chunk_pos.clone() + ChunkPos::X))
-            .map(Arc::clone)
             .map(|chunk| {
-                let lock = chunk.read().unwrap();
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (y, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = lock.block_relative(0, y, z).is_not_empty();
+                        *data = chunk.block(0, y, z).is_some();
                     }
                 }
                 data
@@ -222,13 +242,11 @@ fn generate_meshes(
 
         let top = level
             .chunk(&(chunk_pos.clone() + ChunkPos::Y))
-            .map(Arc::clone)
             .map(|chunk| {
-                let lock = chunk.read().unwrap();
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = lock.block_relative(x, 0, z).is_not_empty();
+                        *data = chunk.block(x, 0, z).is_some();
                     }
                 }
                 data
@@ -236,13 +254,11 @@ fn generate_meshes(
 
         let bottom = level
             .chunk(&(chunk_pos.clone() - ChunkPos::Y))
-            .map(Arc::clone)
             .map(|chunk| {
-                let lock = chunk.read().unwrap();
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (z, data) in data.iter_mut().enumerate() {
-                        *data = lock.block_relative(x, CHUNK_SIZE - 1, z).is_not_empty();
+                        *data = chunk.block(x, CHUNK_SIZE - 1, z).is_some();
                     }
                 }
                 data
@@ -250,13 +266,11 @@ fn generate_meshes(
 
         let front = level
             .chunk(&(chunk_pos.clone() + ChunkPos::Z))
-            .map(Arc::clone)
             .map(|chunk| {
-                let lock = chunk.read().unwrap();
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (y, data) in data.iter_mut().enumerate() {
-                        *data = lock.block_relative(x, y, 0).is_not_empty();
+                        *data = chunk.block(x, y, 0).is_some();
                     }
                 }
                 data
@@ -264,13 +278,11 @@ fn generate_meshes(
 
         let back = level
             .chunk(&(chunk_pos.clone() - ChunkPos::Z))
-            .map(Arc::clone)
             .map(|chunk| {
-                let lock = chunk.read().unwrap();
                 let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
                 for (x, data) in data.iter_mut().enumerate() {
                     for (y, data) in data.iter_mut().enumerate() {
-                        *data = lock.block_relative(x, y, CHUNK_SIZE - 1).is_not_empty();
+                        *data = chunk.block(x, y, CHUNK_SIZE - 1).is_some();
                     }
                 }
                 data
@@ -285,9 +297,8 @@ fn generate_meshes(
             back,
         };
 
-        let ids = registry.ids();
-        let task = thread_pool
-            .spawn(async move { build_chunk(adjacent, chunk.clone().read().unwrap(), ids) });
+        let registry_clone = registry.clone();
+        let task = thread_pool.spawn(async move { build_chunk(adjacent, chunk, registry_clone) });
 
         entity.remove::<Dirty>().insert(MeshTask(task));
     }

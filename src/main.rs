@@ -4,16 +4,14 @@ use std::f32::consts::FRAC_PI_2;
 
 use bevy::{core_pipeline::experimental::taa::TemporalAntiAliasPlugin, prelude::*};
 use bevy_fps_counter::FpsCounterPlugin;
-use bevy_mod_mipmap_generator::{generate_mipmaps, MipmapGeneratorPlugin, MipmapGeneratorSettings};
 use bevy_rapier3d::prelude::*;
 
-use block::DirtBlock;
-use block_registry::BlockRegistry;
+use block_registry::{Block, SharedBlockRegistry};
+use chunk_builder::{AdjacentBlocks, ChunkBuilder};
 use level::Level;
 use level_gen::LevelGenPlugin;
 use player::PlayerPlugin;
 
-mod block;
 mod block_registry;
 mod chunk;
 mod chunk_builder;
@@ -24,21 +22,16 @@ mod position;
 
 fn main() {
     App::new()
-        .init_resource::<BlockRegistry>()
+        .init_resource::<SharedBlockRegistry>()
         .init_resource::<Level>()
         .insert_resource(ClearColor(Color::rgb(0.2, 0.5, 0.8)))
         .insert_resource(AmbientLight {
             brightness: 1.0,
             ..default()
         })
-        .insert_resource(MipmapGeneratorSettings {
-            anisotropic_filtering: 1,
-            ..default()
-        })
         .insert_resource(Msaa::Sample8)
         .add_plugins((
             DefaultPlugins.set(ImagePlugin::default_nearest()),
-            MipmapGeneratorPlugin,
             TemporalAntiAliasPlugin,
             RapierPhysicsPlugin::<NoUserData>::default(),
             FpsCounterPlugin,
@@ -50,7 +43,6 @@ fn main() {
             ..default()
         })
         .add_systems(Startup, (setup_world, register_blocks))
-        .add_systems(Update, generate_mipmaps::<StandardMaterial>)
         .run();
 }
 
@@ -69,6 +61,67 @@ fn setup_world(mut commands: Commands) {
     });
 }
 
-fn register_blocks(mut registry: ResMut<BlockRegistry>) {
-    registry.register::<DirtBlock>("dirt".to_string());
+fn register_blocks(registry: Res<SharedBlockRegistry>) {
+    registry.write().unwrap().register(
+        "dirt".to_string(),
+        Block {
+            render: render_dirt,
+        },
+    );
+}
+
+fn render_dirt(chunk: &mut ChunkBuilder, adjacent: AdjacentBlocks, Vec3 { x, y, z }: Vec3) {
+    // Left
+    if !adjacent.left {
+        let a = chunk.vertex([x, y, z], [-1.0, 0.0, 0.0], [0.0, 0.0]);
+        let b = chunk.vertex([x, y + 1.0, z], [-1.0, 0.0, 0.0], [0.0, 1.0]);
+        let c = chunk.vertex([x, y + 1.0, z + 1.0], [-1.0, 0.0, 0.0], [1.0, 1.0]);
+        let d = chunk.vertex([x, y, z + 1.0], [-1.0, 0.0, 0.0], [1.0, 0.0]);
+        chunk.indices([a, d, c, c, b, a]);
+    }
+
+    // Right
+    if !adjacent.right {
+        let a = chunk.vertex([x + 1.0, y, z], [1.0, 0.0, 0.0], [0.0, 0.0]);
+        let b = chunk.vertex([x + 1.0, y + 1.0, z], [1.0, 0.0, 0.0], [0.0, 1.0]);
+        let c = chunk.vertex([x + 1.0, y + 1.0, z + 1.0], [1.0, 0.0, 0.0], [1.0, 1.0]);
+        let d = chunk.vertex([x + 1.0, y, z + 1.0], [1.0, 0.0, 0.0], [1.0, 0.0]);
+        chunk.indices([a, b, c, c, d, a]);
+    }
+
+    // Top
+    if !adjacent.top {
+        let a = chunk.vertex([x, y + 1.0, z], [0.0, 1.0, 0.0], [0.0, 0.0]);
+        let b = chunk.vertex([x + 1.0, y + 1.0, z], [0.0, 1.0, 0.0], [0.0, 1.0]);
+        let c = chunk.vertex([x + 1.0, y + 1.0, z + 1.0], [0.0, 1.0, 0.0], [1.0, 1.0]);
+        let d = chunk.vertex([x, y + 1.0, z + 1.0], [0.0, 1.0, 0.0], [1.0, 0.0]);
+        chunk.indices([a, d, c, c, b, a]);
+    }
+
+    // Bottom
+    if !adjacent.bottom {
+        let a = chunk.vertex([x, y, z], [0.0, -1.0, 0.0], [0.0, 0.0]);
+        let b = chunk.vertex([x + 1.0, y, z], [0.0, -1.0, 0.0], [0.0, 1.0]);
+        let c = chunk.vertex([x + 1.0, y, z + 1.0], [0.0, -1.0, 0.0], [1.0, 1.0]);
+        let d = chunk.vertex([x, y, z + 1.0], [0.0, -1.0, 0.0], [1.0, 0.0]);
+        chunk.indices([a, b, c, c, d, a]);
+    }
+
+    // Front
+    if !adjacent.front {
+        let a = chunk.vertex([x, y, z + 1.0], [0.0, 0.0, 1.0], [0.0, 0.0]);
+        let b = chunk.vertex([x + 1.0, y, z + 1.0], [0.0, 0.0, 1.0], [0.0, 1.0]);
+        let c = chunk.vertex([x + 1.0, y + 1.0, z + 1.0], [0.0, 0.0, 1.0], [1.0, 1.0]);
+        let d = chunk.vertex([x, y + 1.0, z + 1.0], [0.0, 0.0, 1.0], [1.0, 0.0]);
+        chunk.indices([a, b, c, c, d, a]);
+    }
+
+    // Back
+    if !adjacent.back {
+        let a = chunk.vertex([x, y, z], [0.0, 0.0, -1.0], [0.0, 0.0]);
+        let b = chunk.vertex([x + 1.0, y, z], [0.0, 0.0, -1.0], [0.0, 1.0]);
+        let c = chunk.vertex([x + 1.0, y + 1.0, z], [0.0, 0.0, -1.0], [1.0, 1.0]);
+        let d = chunk.vertex([x, y + 1.0, z], [0.0, 0.0, -1.0], [1.0, 0.0]);
+        chunk.indices([a, d, c, c, b, a]);
+    }
 }

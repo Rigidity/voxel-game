@@ -1,5 +1,3 @@
-use std::sync::{Arc, RwLock};
-
 use bevy::{prelude::Resource, utils::HashMap};
 use noise::Perlin;
 
@@ -7,7 +5,7 @@ use crate::{chunk::Chunk, position::ChunkPos};
 
 #[derive(Default, Resource)]
 pub struct Level {
-    loaded_chunks: HashMap<ChunkPos, Arc<RwLock<Chunk>>>,
+    loaded_chunks: HashMap<ChunkPos, Chunk>,
     noise: Perlin,
 }
 
@@ -16,7 +14,7 @@ impl Level {
         self.loaded_chunks.contains_key(position)
     }
 
-    pub fn add_chunk(&mut self, position: &ChunkPos, chunk: Arc<RwLock<Chunk>>) {
+    pub fn add_chunk(&mut self, position: &ChunkPos, chunk: Chunk) {
         self.loaded_chunks.insert(position.clone(), chunk);
     }
 
@@ -24,11 +22,15 @@ impl Level {
         self.loaded_chunks.remove(position);
     }
 
-    pub fn chunk(&self, position: &ChunkPos) -> Option<&Arc<RwLock<Chunk>>> {
+    pub fn chunk(&self, position: &ChunkPos) -> Option<&Chunk> {
         self.loaded_chunks.get(position)
     }
 
-    pub fn noise(&self) -> &Perlin {
-        &self.noise
+    pub fn chunk_mut(&mut self, position: &ChunkPos) -> Option<&mut Chunk> {
+        self.loaded_chunks.get_mut(position)
+    }
+
+    pub fn noise(&self) -> Perlin {
+        self.noise
     }
 }
