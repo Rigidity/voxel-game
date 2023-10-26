@@ -117,7 +117,6 @@ fn load_chunks(
                 // Generate new chunk
                 generate_chunk(noise, pos, registry_clone)
             });
-
             entity.insert(GenerateTask(task));
         }
     }
@@ -171,13 +170,7 @@ fn remove_chunks(
 ) {
     let max_distance = (max_distance.0 * CHUNK_SIZE) as f32;
     let transform = player.single();
-    let player_chunk_pos = BlockPos::new(
-        transform.translation.x as i32,
-        transform.translation.y as i32,
-        transform.translation.z as i32,
-    )
-    .chunk_pos()
-    .0;
+    let player_chunk_pos = BlockPos::from(transform.translation).chunk_pos().0;
     let player_center_pos = player_chunk_pos.center();
 
     for (chunk, chunk_pos) in chunks.iter() {
