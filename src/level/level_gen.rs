@@ -10,12 +10,12 @@ use noise::NoiseFn;
 
 use crate::{
     block_registry::SharedBlockRegistry,
-    chunk::{Chunk, Dirty, CHUNK_SIZE},
-    chunk_builder::{build_chunk, AdjacentChunkData},
-    level::Level,
+    level::{Chunk, Dirty, Level, CHUNK_SIZE},
     player::Player,
     position::{BlockPos, ChunkPos},
 };
+
+use super::{build_chunk, AdjacentChunkData};
 
 #[derive(Component)]
 pub struct MeshTask(Task<(Mesh, Option<Collider>)>);

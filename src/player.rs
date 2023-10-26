@@ -11,8 +11,7 @@ use bevy::{
 use bevy_rapier3d::prelude::*;
 
 use crate::{
-    chunk::{Dirty, CHUNK_SIZE},
-    level::Level,
+    level::{Dirty, Level, CHUNK_SIZE},
     position::{BlockPos, ChunkPos},
 };
 

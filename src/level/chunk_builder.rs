@@ -8,7 +8,7 @@ use bevy_rapier3d::prelude::*;
 
 use crate::{
     block_registry::BlockRegistry,
-    chunk::{Chunk, CHUNK_SIZE},
+    level::{Chunk, CHUNK_SIZE},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

@@ -7,16 +7,11 @@ use bevy_fps_counter::FpsCounterPlugin;
 use bevy_rapier3d::prelude::*;
 
 use block_registry::{Block, SharedBlockRegistry};
-use chunk_builder::{AdjacentBlocks, ChunkBuilder};
-use level::Level;
-use level_gen::LevelGenPlugin;
+use level::{AdjacentBlocks, ChunkBuilder, Level, LevelGenPlugin};
 use player::PlayerPlugin;
 
 mod block_registry;
-mod chunk;
-mod chunk_builder;
 mod level;
-mod level_gen;
 mod player;
 mod position;
 
@@ -70,7 +65,11 @@ fn register_blocks(registry: Res<SharedBlockRegistry>) {
     );
 }
 
-fn render_dirt(chunk: &mut ChunkBuilder, adjacent: AdjacentBlocks, Vec3 { x, y, z }: Vec3) {
+fn render_dirt(chunk: &mut ChunkBuilder, adjacent: AdjacentBlocks, position: Vec3) {
+    let x = position.x;
+    let y = position.y;
+    let z = position.z;
+
     // Left
     if !adjacent.left {
         let a = chunk.vertex([x, y, z], [-1.0, 0.0, 0.0], [0.0, 0.0]);

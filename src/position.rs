@@ -1,7 +1,7 @@
 use bevy::prelude::{Component, Vec3};
 use derive_more::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
-use crate::chunk::CHUNK_SIZE;
+use crate::level::CHUNK_SIZE;
 
 #[derive(
     Default,

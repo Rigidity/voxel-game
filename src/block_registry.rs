@@ -5,7 +5,7 @@ use std::{
 
 use bevy::{prelude::*, utils::HashMap};
 
-use crate::chunk_builder::{AdjacentBlocks, ChunkBuilder};
+use crate::level::{AdjacentBlocks, ChunkBuilder};
 
 pub struct Block {
     pub render: fn(&mut ChunkBuilder, AdjacentBlocks, Vec3),
