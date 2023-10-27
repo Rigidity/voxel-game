@@ -153,16 +153,6 @@ fn generate_chunk(
         }
     }
 
-    fs::create_dir_all("chunks").unwrap();
-    fs::write(
-        format!(
-            "chunks/chunk_{}_{}_{}.bin",
-            chunk_pos.x, chunk_pos.y, chunk_pos.z
-        ),
-        chunk.serialize(&registry.read().unwrap()),
-    )
-    .unwrap();
-
     chunk
 }
 
@@ -202,14 +192,28 @@ fn remove_chunks(
 
 fn insert_meshes(
     mut commands: Commands,
+    level: Res<Level>,
+    registry: Res<SharedBlockRegistry>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut query: Query<(Entity, &mut MeshTask)>,
+    mut query: Query<(Entity, &ChunkPos, &mut MeshTask)>,
 ) {
-    for (entity, mut mesh_task) in query.iter_mut() {
+    for (entity, &chunk_pos, mut mesh_task) in query.iter_mut() {
         if let Some((mesh, collider)) = block_on(future::poll_once(&mut mesh_task.0)) {
             let mut entity = commands.entity(entity);
             entity.remove::<MeshTask>();
             entity.insert(meshes.add(mesh)).remove::<Aabb>();
+
+            if let Some(chunk) = level.chunk(chunk_pos) {
+                fs::create_dir_all("chunks").unwrap();
+                fs::write(
+                    format!(
+                        "chunks/chunk_{}_{}_{}.bin",
+                        chunk_pos.x, chunk_pos.y, chunk_pos.z
+                    ),
+                    chunk.serialize(&registry.read().unwrap()),
+                )
+                .unwrap();
+            }
 
             if let Some(collider) = collider {
                 entity.insert(collider);
