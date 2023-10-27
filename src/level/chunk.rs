@@ -30,8 +30,47 @@ impl Chunk {
         &mut self.blocks[Self::index(x, y, z)]
     }
 
+    pub fn deserialize(bytes: &[u8], registry: &BlockRegistry) -> Chunk {
+        let mut chunk = Chunk::default();
+        let mut i = 0;
+
+        let name_list_len = u16::from_be_bytes([bytes[i], bytes[i + 1]]) as usize;
+        i += 2;
+
+        let mut names = Vec::with_capacity(name_list_len);
+        for _ in 0..name_list_len {
+            let name_len = bytes[i] as usize;
+            i += 1;
+
+            names.push(registry.block_id(&String::from_utf8_lossy(&bytes[i..i + name_len])));
+            i += name_len;
+        }
+
+        let mut block = 0;
+
+        while i < bytes.len() {
+            let count = u16::from_be_bytes([bytes[i], bytes[i + 1]]) as usize;
+            i += 2;
+
+            let index = u16::from_be_bytes([bytes[i], bytes[i + 1]]) as usize;
+            i += 2;
+
+            for _ in 0..count {
+                if index == 0 {
+                    chunk.blocks[block] = None;
+                    block += 1;
+                } else {
+                    chunk.blocks[block] = Some(names[index - 1]);
+                    block += 1;
+                }
+            }
+        }
+
+        chunk
+    }
+
     pub fn serialize(&self, registry: &BlockRegistry) -> Vec<u8> {
-        let mut bytes = Vec::new();
+        let mut data = Vec::new();
         let mut names = IndexSet::new();
         let mut last = None;
         let mut count = 0;
@@ -44,23 +83,29 @@ impl Chunk {
             if last == Some(index) {
                 count += 1;
             } else {
+                if let Some(index) = last {
+                    data.extend((count as u16).to_be_bytes());
+                    data.extend((index as u16).to_be_bytes());
+                }
                 last = Some(index);
-                count = 0;
-                bytes.extend((count as u16).to_be_bytes());
-                bytes.extend((index as u16).to_be_bytes());
+                count = 1;
             }
         }
 
         if let Some(index) = last {
-            bytes.extend((count as u16).to_be_bytes());
-            bytes.extend((index as u16).to_be_bytes());
+            data.extend((count as u16).to_be_bytes());
+            data.extend((index as u16).to_be_bytes());
         }
+
+        let mut bytes = Vec::new();
+        bytes.extend((names.len() as u16).to_be_bytes());
 
         for name in names {
             bytes.push(name.len().try_into().unwrap());
             bytes.extend(name.as_bytes());
         }
 
+        bytes.extend(data);
         bytes
     }
 

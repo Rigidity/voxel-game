@@ -1,4 +1,7 @@
-use std::sync::{Arc, RwLock};
+use std::{
+    fs,
+    sync::{Arc, RwLock},
+};
 
 use async_io::block_on;
 use bevy::{
@@ -114,8 +117,14 @@ fn load_chunks(
             let noise = level.noise();
             let registry_clone = Arc::clone(&registry);
             let task = thread_pool.spawn(async move {
-                // Generate new chunk
-                generate_chunk(noise, pos, registry_clone)
+                fs::create_dir_all("chunks").unwrap();
+                if let Ok(bytes) =
+                    fs::read(format!("chunks/chunk_{}_{}_{}.bin", pos.x, pos.y, pos.z))
+                {
+                    Chunk::deserialize(&bytes, &registry_clone.read().unwrap())
+                } else {
+                    generate_chunk(noise, pos, registry_clone)
+                }
             });
             entity.insert(GenerateTask(task));
         }
@@ -143,6 +152,16 @@ fn generate_chunk(
             }
         }
     }
+
+    fs::create_dir_all("chunks").unwrap();
+    fs::write(
+        format!(
+            "chunks/chunk_{}_{}_{}.bin",
+            chunk_pos.x, chunk_pos.y, chunk_pos.z
+        ),
+        chunk.serialize(&registry.read().unwrap()),
+    )
+    .unwrap();
 
     chunk
 }
