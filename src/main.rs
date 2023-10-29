@@ -1,14 +1,19 @@
 #![allow(clippy::type_complexity)]
 
-use std::f32::consts::FRAC_PI_2;
+use std::{
+    f32::consts::FRAC_PI_2,
+    sync::{Arc, Mutex},
+};
 
-use bevy::{core_pipeline::experimental::taa::TemporalAntiAliasPlugin, prelude::*};
+use bevy::{core_pipeline::experimental::taa::TemporalAntiAliasPlugin, prelude::*, utils::HashMap};
 use bevy_fps_counter::FpsCounterPlugin;
 use bevy_rapier3d::prelude::*;
 
 use block_registry::{Block, SharedBlockRegistry};
 use level::{AdjacentBlocks, ChunkBuilder, Level, LevelGenPlugin};
+use noise::Perlin;
 use player::PlayerPlugin;
+use rusqlite::Connection;
 
 mod block_registry;
 mod level;
@@ -18,7 +23,6 @@ mod position;
 fn main() {
     App::new()
         .init_resource::<SharedBlockRegistry>()
-        .init_resource::<Level>()
         .insert_resource(ClearColor(Color::rgb(0.2, 0.5, 0.8)))
         .insert_resource(AmbientLight {
             brightness: 1.0,
@@ -37,8 +41,30 @@ fn main() {
             gravity: Vec3::Y * -9.81 * 3.0,
             ..default()
         })
-        .add_systems(Startup, (setup_world, register_blocks))
+        .add_systems(Startup, (setup_level, setup_world, register_blocks))
         .run();
+}
+
+fn setup_level(mut commands: Commands) {
+    let connection = Connection::open("chunks.sqlite").unwrap();
+
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS `chunks` (
+        `x` INTEGER,
+        `y` INTEGER,
+        `z` INTEGER,
+        `data` BLOB
+    )",
+            (),
+        )
+        .unwrap();
+
+    commands.insert_resource(Level {
+        connection: Arc::new(Mutex::new(connection)),
+        loaded_chunks: HashMap::new(),
+        noise: Perlin::default(),
+    });
 }
 
 fn setup_world(mut commands: Commands) {

@@ -1,5 +1,8 @@
+use std::sync::{Arc, Mutex};
+
 use bevy::{prelude::Resource, utils::HashMap};
 use noise::Perlin;
+use rusqlite::Connection;
 
 use crate::position::ChunkPos;
 
@@ -11,10 +14,11 @@ pub use chunk::*;
 pub use chunk_builder::*;
 pub use level_gen::*;
 
-#[derive(Default, Resource)]
+#[derive(Resource)]
 pub struct Level {
-    loaded_chunks: HashMap<ChunkPos, Chunk>,
-    noise: Perlin,
+    pub connection: Arc<Mutex<Connection>>,
+    pub loaded_chunks: HashMap<ChunkPos, Chunk>,
+    pub noise: Perlin,
 }
 
 impl Level {

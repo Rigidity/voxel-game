@@ -1,7 +1,4 @@
-use std::{
-    fs,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, RwLock};
 
 use async_io::block_on;
 use bevy::{
@@ -115,15 +112,21 @@ fn load_chunks(
 
         if !level.is_loaded(pos) {
             let noise = level.noise();
-            let registry_clone = Arc::clone(&registry);
+            let registry = Arc::clone(&registry);
+            let connection = Arc::clone(&level.connection);
             let task = thread_pool.spawn(async move {
-                fs::create_dir_all("chunks").unwrap();
-                if let Ok(bytes) =
-                    fs::read(format!("chunks/chunk_{}_{}_{}.bin", pos.x, pos.y, pos.z))
-                {
-                    Chunk::deserialize(&bytes, &registry_clone.read().unwrap())
+                let conn = connection.lock().unwrap();
+
+                let result = conn.query_row(
+                    "SELECT `data` FROM `chunks` WHERE `x` = ?1 AND `y` = ?2 AND `z` = ?3",
+                    (pos.x, pos.y, pos.z),
+                    |row| row.get::<_, Vec<u8>>(0),
+                );
+
+                if let Ok(bytes) = result {
+                    Chunk::deserialize(&bytes, &registry.read().unwrap())
                 } else {
-                    generate_chunk(noise, pos, registry_clone)
+                    generate_chunk(noise, pos, registry)
                 }
             });
             entity.insert(GenerateTask(task));
@@ -192,28 +195,14 @@ fn remove_chunks(
 
 fn insert_meshes(
     mut commands: Commands,
-    level: Res<Level>,
-    registry: Res<SharedBlockRegistry>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut query: Query<(Entity, &ChunkPos, &mut MeshTask)>,
+    mut query: Query<(Entity, &mut MeshTask)>,
 ) {
-    for (entity, &chunk_pos, mut mesh_task) in query.iter_mut() {
+    for (entity, mut mesh_task) in query.iter_mut() {
         if let Some((mesh, collider)) = block_on(future::poll_once(&mut mesh_task.0)) {
             let mut entity = commands.entity(entity);
             entity.remove::<MeshTask>();
             entity.insert(meshes.add(mesh)).remove::<Aabb>();
-
-            if let Some(chunk) = level.chunk(chunk_pos) {
-                fs::create_dir_all("chunks").unwrap();
-                fs::write(
-                    format!(
-                        "chunks/chunk_{}_{}_{}.bin",
-                        chunk_pos.x, chunk_pos.y, chunk_pos.z
-                    ),
-                    chunk.serialize(&registry.read().unwrap()),
-                )
-                .unwrap();
-            }
 
             if let Some(collider) = collider {
                 entity.insert(collider);
@@ -232,8 +221,8 @@ fn generate_meshes(
 ) {
     let thread_pool = AsyncComputeTaskPool::get();
 
-    for (entity, &chunk_pos) in query.iter() {
-        let Some(chunk) = level.chunk(chunk_pos).cloned() else {
+    for (entity, &pos) in query.iter() {
+        let Some(chunk) = level.chunk(pos).cloned() else {
             continue;
         };
 
@@ -241,7 +230,7 @@ fn generate_meshes(
             continue;
         };
 
-        let left = level.chunk(chunk_pos - ChunkPos::X).map(|chunk| {
+        let left = level.chunk(pos - ChunkPos::X).map(|chunk| {
             let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
             for (y, data) in data.iter_mut().enumerate() {
                 for (z, data) in data.iter_mut().enumerate() {
@@ -251,7 +240,7 @@ fn generate_meshes(
             data
         });
 
-        let right = level.chunk(chunk_pos + ChunkPos::X).map(|chunk| {
+        let right = level.chunk(pos + ChunkPos::X).map(|chunk| {
             let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
             for (y, data) in data.iter_mut().enumerate() {
                 for (z, data) in data.iter_mut().enumerate() {
@@ -261,7 +250,7 @@ fn generate_meshes(
             data
         });
 
-        let top = level.chunk(chunk_pos + ChunkPos::Y).map(|chunk| {
+        let top = level.chunk(pos + ChunkPos::Y).map(|chunk| {
             let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
             for (x, data) in data.iter_mut().enumerate() {
                 for (z, data) in data.iter_mut().enumerate() {
@@ -271,7 +260,7 @@ fn generate_meshes(
             data
         });
 
-        let bottom = level.chunk(chunk_pos - ChunkPos::Y).map(|chunk| {
+        let bottom = level.chunk(pos - ChunkPos::Y).map(|chunk| {
             let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
             for (x, data) in data.iter_mut().enumerate() {
                 for (z, data) in data.iter_mut().enumerate() {
@@ -281,7 +270,7 @@ fn generate_meshes(
             data
         });
 
-        let front = level.chunk(chunk_pos + ChunkPos::Z).map(|chunk| {
+        let front = level.chunk(pos + ChunkPos::Z).map(|chunk| {
             let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
             for (x, data) in data.iter_mut().enumerate() {
                 for (y, data) in data.iter_mut().enumerate() {
@@ -291,7 +280,7 @@ fn generate_meshes(
             data
         });
 
-        let back = level.chunk(chunk_pos - ChunkPos::Z).map(|chunk| {
+        let back = level.chunk(pos - ChunkPos::Z).map(|chunk| {
             let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
             for (x, data) in data.iter_mut().enumerate() {
                 for (y, data) in data.iter_mut().enumerate() {
@@ -310,8 +299,38 @@ fn generate_meshes(
             back,
         };
 
-        let registry_clone = registry.clone();
-        let task = thread_pool.spawn(async move { build_chunk(adjacent, chunk, registry_clone) });
+        let registry = Arc::clone(&registry);
+        let connection = Arc::clone(&level.connection);
+
+        let task = thread_pool.spawn(async move {
+            let data = chunk.serialize(&registry.read().unwrap());
+            let conn = connection.lock().unwrap();
+
+            if conn
+                .query_row(
+                    "SELECT COUNT(*) FROM `chunks` WHERE `x` = ?1 AND `y` = ?2 AND `z` = ?3",
+                    (pos.x, pos.y, pos.z),
+                    |row| row.get::<_, usize>(0),
+                )
+                .unwrap()
+                == 0
+            {
+                conn.execute(
+                    "INSERT INTO `chunks` (`x`, `y`, `z`, `data`) VALUES (?1, ?2, ?3, ?4)",
+                    (pos.x, pos.y, pos.z, data),
+                )
+                .unwrap();
+            } else {
+                conn.execute(
+                    "UPDATE `chunks` SET `data` = ?1 WHERE `x` = ?2 AND `y` = ?3 AND `z` = ?4",
+                    (data, pos.x, pos.y, pos.z),
+                )
+                .unwrap();
+            }
+
+            drop(conn);
+            build_chunk(adjacent, chunk, registry)
+        });
 
         entity.remove::<Dirty>().insert(MeshTask(task));
     }
