@@ -5,11 +5,7 @@ use std::{
 
 use bevy::{prelude::*, utils::HashMap};
 
-use crate::level::{AdjacentBlocks, ChunkBuilder};
-
-pub struct Block {
-    pub render: fn(&mut ChunkBuilder, AdjacentBlocks, Vec3),
-}
+use crate::block::Block;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BlockId(NonZeroU16);
