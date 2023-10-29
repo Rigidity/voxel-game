@@ -82,10 +82,17 @@ fn remove_block(
     mut level: ResMut<Level>,
     mut commands: Commands,
     mut gizmos: Gizmos,
+    primary_window: Query<&Window, With<PrimaryWindow>>,
     mouse: Res<Input<MouseButton>>,
     camera: Query<&GlobalTransform, With<PlayerCamera>>,
     chunk_query: Query<(Entity, &ChunkPos)>,
 ) {
+    let window = primary_window.single();
+
+    if window.cursor.grab_mode == CursorGrabMode::None {
+        return;
+    }
+
     let transform = camera.single();
 
     if let Ok((x, y, z)) = raycast_blocks(&level, transform.translation(), transform.forward(), 6) {
@@ -217,71 +224,72 @@ fn player_move(
     mut player: Query<&mut Velocity, With<Player>>,
 ) {
     let window = primary_window.single();
-    if window.cursor.grab_mode == CursorGrabMode::None {
-        return;
-    };
-
     let transform = camera.single();
     let mut velocity = player.single_mut();
 
-    let mut movement = Vec3::ZERO;
-    let local_z = transform.local_z();
-    let forward = -Vec3::new(local_z.x, 0.0, local_z.z);
-    let right = Vec3::new(local_z.z, 0.0, -local_z.x);
+    if window.cursor.grab_mode != CursorGrabMode::None {
+        let local_z = transform.local_z();
+        let forward = -Vec3::new(local_z.x, 0.0, local_z.z);
+        let right = Vec3::new(local_z.z, 0.0, -local_z.x);
 
-    if keyboard.pressed(config.movement_controls.move_forward) {
-        movement += forward;
-    }
+        let mut movement = Vec3::ZERO;
 
-    if keyboard.pressed(config.movement_controls.move_backward) {
-        movement -= forward;
-    }
+        if keyboard.pressed(config.movement_controls.move_forward) {
+            movement += forward;
+        }
 
-    if keyboard.pressed(config.movement_controls.strafe_left) {
-        movement -= right;
-    }
+        if keyboard.pressed(config.movement_controls.move_backward) {
+            movement -= forward;
+        }
 
-    if keyboard.pressed(config.movement_controls.strafe_right) {
-        movement += right;
+        if keyboard.pressed(config.movement_controls.strafe_left) {
+            movement -= right;
+        }
+
+        if keyboard.pressed(config.movement_controls.strafe_right) {
+            movement += right;
+        }
+
+        velocity.linvel +=
+            movement.normalize_or_zero() * time.delta_seconds() * config.movement_speed;
+
+        if keyboard.just_pressed(config.movement_controls.jump) {
+            velocity.linvel.y = 9.0;
+        }
     }
 
     let slow_factor = (1.0 - time.delta_seconds() * 8.0).max(0.0);
     velocity.linvel.x *= slow_factor;
     velocity.linvel.z *= slow_factor;
-
-    velocity.linvel += movement.normalize_or_zero() * time.delta_seconds() * config.movement_speed;
-
-    if keyboard.just_pressed(config.movement_controls.jump) {
-        velocity.linvel.y = 6.0;
-    }
 }
 
 fn setup_input(mut primary_window: Query<&mut Window, With<PrimaryWindow>>) {
-    if let Ok(mut window) = primary_window.get_single_mut() {
-        set_grab(&mut window, true);
-    }
+    grab(&mut primary_window.single_mut());
 }
 
 fn toggle_grab(
     keys: Res<Input<KeyCode>>,
     mut primary_window: Query<&mut Window, With<PrimaryWindow>>,
 ) {
-    if keys.just_pressed(KeyCode::Escape) {
-        if let Ok(mut window) = primary_window.get_single_mut() {
-            match window.cursor.grab_mode {
-                CursorGrabMode::None => set_grab(&mut window, true),
-                _ => set_grab(&mut window, false),
-            }
-        }
+    if !keys.just_pressed(KeyCode::Escape) {
+        return;
+    }
+
+    let mut window = primary_window.single_mut();
+
+    if window.cursor.grab_mode == CursorGrabMode::None {
+        grab(&mut window);
+    } else {
+        ungrab(&mut window);
     }
 }
 
-fn set_grab(window: &mut Window, grab: bool) {
-    if grab {
-        window.cursor.grab_mode = CursorGrabMode::Confined;
-        window.cursor.visible = false;
-    } else {
-        window.cursor.grab_mode = CursorGrabMode::None;
-        window.cursor.visible = true;
-    }
+fn grab(window: &mut Window) {
+    window.cursor.grab_mode = CursorGrabMode::Confined;
+    window.cursor.visible = false;
+}
+
+fn ungrab(window: &mut Window) {
+    window.cursor.grab_mode = CursorGrabMode::None;
+    window.cursor.visible = true;
 }

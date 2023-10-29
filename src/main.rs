@@ -32,6 +32,10 @@ fn main() {
             brightness: 0.8,
             ..default()
         })
+        .insert_resource(RapierConfiguration {
+            gravity: Vec3::Y * -9.81 * 2.5,
+            ..default()
+        })
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .add_plugins(TemporalAntiAliasPlugin)
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())

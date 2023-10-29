@@ -64,6 +64,7 @@ pub struct MovementControls {
     pub strafe_left: KeyCode,
     pub strafe_right: KeyCode,
     pub jump: KeyCode,
+    pub descend: KeyCode,
 }
 
 impl Default for MovementControls {
@@ -74,6 +75,7 @@ impl Default for MovementControls {
             strafe_left: KeyCode::A,
             strafe_right: KeyCode::D,
             jump: KeyCode::Space,
+            descend: KeyCode::ShiftLeft,
         }
     }
 }
