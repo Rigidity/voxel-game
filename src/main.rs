@@ -10,12 +10,14 @@ use bevy_fps_counter::FpsCounterPlugin;
 use bevy_rapier3d::prelude::*;
 
 use block_registry::{Block, SharedBlockRegistry};
+use config::ConfigPlugin;
 use level::{AdjacentBlocks, ChunkBuilder, Level, LevelGenPlugin};
 use noise::Perlin;
 use player::PlayerPlugin;
 use rusqlite::Connection;
 
 mod block_registry;
+mod config;
 mod level;
 mod player;
 mod position;
@@ -29,14 +31,13 @@ fn main() {
             ..default()
         })
         .insert_resource(Msaa::Sample8)
-        .add_plugins((
-            DefaultPlugins.set(ImagePlugin::default_nearest()),
-            TemporalAntiAliasPlugin,
-            RapierPhysicsPlugin::<NoUserData>::default(),
-            FpsCounterPlugin,
-            PlayerPlugin,
-            LevelGenPlugin,
-        ))
+        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+        .add_plugins(TemporalAntiAliasPlugin)
+        .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
+        .add_plugins(FpsCounterPlugin)
+        .add_plugins(ConfigPlugin)
+        .add_plugins(PlayerPlugin)
+        .add_plugins(LevelGenPlugin)
         .insert_resource(RapierConfiguration {
             gravity: Vec3::Y * -9.81 * 3.0,
             ..default()

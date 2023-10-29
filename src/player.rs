@@ -11,6 +11,7 @@ use bevy::{
 use bevy_rapier3d::prelude::*;
 
 use crate::{
+    config::Config,
     level::{Dirty, Level, CHUNK_SIZE},
     position::{BlockPos, ChunkPos},
 };
@@ -20,45 +21,6 @@ pub struct Player;
 
 #[derive(Component)]
 pub struct PlayerCamera;
-
-#[derive(Resource)]
-pub struct MouseSensitivity(pub f32);
-
-impl Default for MouseSensitivity {
-    fn default() -> Self {
-        Self(0.00012)
-    }
-}
-
-#[derive(Resource)]
-pub struct MovementSpeed(pub f32);
-
-impl Default for MovementSpeed {
-    fn default() -> Self {
-        Self(70.0)
-    }
-}
-
-#[derive(Resource)]
-pub struct MovementControls {
-    pub forward: KeyCode,
-    pub backward: KeyCode,
-    pub left: KeyCode,
-    pub right: KeyCode,
-    pub jump: KeyCode,
-}
-
-impl Default for MovementControls {
-    fn default() -> Self {
-        Self {
-            forward: KeyCode::W,
-            backward: KeyCode::S,
-            left: KeyCode::A,
-            right: KeyCode::D,
-            jump: KeyCode::Space,
-        }
-    }
-}
 
 #[derive(Resource, Default)]
 struct InputState {
@@ -70,9 +32,6 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<InputState>()
-            .init_resource::<MouseSensitivity>()
-            .init_resource::<MovementSpeed>()
-            .init_resource::<MovementControls>()
             .add_systems(Startup, (setup_player, setup_input))
             .add_systems(
                 Update,
@@ -225,7 +184,7 @@ fn raycast_blocks(
 fn player_look(
     primary_window: Query<&Window, With<PrimaryWindow>>,
     motion: Res<Events<MouseMotion>>,
-    sensitivity: Res<MouseSensitivity>,
+    config: Res<Config>,
     mut state: ResMut<InputState>,
     mut camera: Query<&mut Transform, With<PlayerCamera>>,
 ) {
@@ -240,8 +199,8 @@ fn player_look(
         let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
 
         let window_scale = window.height().min(window.width());
-        pitch -= (sensitivity.0 * ev.delta.y * window_scale).to_radians();
-        yaw -= (sensitivity.0 * ev.delta.x * window_scale).to_radians();
+        pitch -= (config.mouse_sensitivity * ev.delta.y * window_scale).to_radians();
+        yaw -= (config.mouse_sensitivity * ev.delta.x * window_scale).to_radians();
 
         let yaw_rotation = Quat::from_axis_angle(Vec3::Y, yaw);
         let pitch_rotation = Quat::from_axis_angle(Vec3::X, pitch.clamp(-1.54, 1.54));
@@ -253,8 +212,7 @@ fn player_move(
     primary_window: Query<&Window, With<PrimaryWindow>>,
     time: Res<Time>,
     keyboard: Res<Input<KeyCode>>,
-    speed: Res<MovementSpeed>,
-    controls: Res<MovementControls>,
+    config: Res<Config>,
     camera: Query<&Transform, With<PlayerCamera>>,
     mut player: Query<&mut Velocity, With<Player>>,
 ) {
@@ -271,19 +229,19 @@ fn player_move(
     let forward = -Vec3::new(local_z.x, 0.0, local_z.z);
     let right = Vec3::new(local_z.z, 0.0, -local_z.x);
 
-    if keyboard.pressed(controls.forward) {
+    if keyboard.pressed(config.movement_controls.move_forward) {
         movement += forward;
     }
 
-    if keyboard.pressed(controls.backward) {
+    if keyboard.pressed(config.movement_controls.move_backward) {
         movement -= forward;
     }
 
-    if keyboard.pressed(controls.left) {
+    if keyboard.pressed(config.movement_controls.strafe_left) {
         movement -= right;
     }
 
-    if keyboard.pressed(controls.right) {
+    if keyboard.pressed(config.movement_controls.strafe_right) {
         movement += right;
     }
 
@@ -291,9 +249,9 @@ fn player_move(
     velocity.linvel.x *= slow_factor;
     velocity.linvel.z *= slow_factor;
 
-    velocity.linvel += movement.normalize_or_zero() * time.delta_seconds() * speed.0;
+    velocity.linvel += movement.normalize_or_zero() * time.delta_seconds() * config.movement_speed;
 
-    if keyboard.just_pressed(controls.jump) {
+    if keyboard.just_pressed(config.movement_controls.jump) {
         velocity.linvel.y = 9.0;
     }
 }
