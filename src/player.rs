@@ -49,12 +49,12 @@ fn setup_player(mut commands: Commands) {
     commands
         .spawn(Player)
         .insert(TransformBundle::default())
-        .insert(Collider::capsule(Vec3::ZERO, Vec3::Y * 0.9, 0.45))
+        .insert(Collider::cuboid(0.4, 0.8, 0.4))
         .insert(RigidBody::Dynamic)
         .insert(LockedAxes::ROTATION_LOCKED)
         .insert(Velocity::default())
+        .insert(Transform::from_xyz(0.0, 20.0, 0.0))
         .insert(Friction::new(0.0))
-        .insert(Transform::from_xyz(0.0, 90.0, 0.0))
         .with_children(|commands| {
             commands
                 .spawn(PlayerCamera)
@@ -68,7 +68,7 @@ fn setup_player(mut commands: Commands) {
                     ..default()
                 })
                 .insert(Camera3dBundle {
-                    transform: Transform::from_xyz(0.0, 1.0, 0.0),
+                    transform: Transform::from_xyz(0.0, 0.7, 0.0),
                     projection: Projection::Perspective(PerspectiveProjection {
                         fov: FRAC_PI_2,
                         ..default()
@@ -252,7 +252,7 @@ fn player_move(
     velocity.linvel += movement.normalize_or_zero() * time.delta_seconds() * config.movement_speed;
 
     if keyboard.just_pressed(config.movement_controls.jump) {
-        velocity.linvel.y = 9.0;
+        velocity.linvel.y = 6.0;
     }
 }
 

@@ -29,10 +29,9 @@ fn main() {
         .init_resource::<SharedBlockRegistry>()
         .insert_resource(ClearColor(Color::rgb(0.2, 0.5, 0.8)))
         .insert_resource(AmbientLight {
-            brightness: 1.0,
+            brightness: 0.8,
             ..default()
         })
-        .insert_resource(Msaa::Sample8)
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .add_plugins(TemporalAntiAliasPlugin)
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
@@ -40,10 +39,6 @@ fn main() {
         .add_plugins(ConfigPlugin)
         .add_plugins(PlayerPlugin)
         .add_plugins(LevelGenPlugin)
-        .insert_resource(RapierConfiguration {
-            gravity: Vec3::Y * -9.81 * 3.0,
-            ..default()
-        })
         .add_systems(Startup, (setup_level, setup_world, register_blocks))
         .run();
 }
@@ -74,6 +69,7 @@ fn setup_world(mut commands: Commands) {
     commands.spawn(DirectionalLightBundle {
         directional_light: DirectionalLight {
             shadows_enabled: false,
+            illuminance: 15000.0,
             ..default()
         },
         transform: Transform {
