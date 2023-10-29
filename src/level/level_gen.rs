@@ -78,7 +78,7 @@ fn load_chunks(
 
     let d = max_distance.0 as i32;
 
-    let positions =
+    let mut positions =
         // x
         (-d..=d).flat_map(|x| {
             // y
@@ -90,6 +90,12 @@ fn load_chunks(
         .filter(|pos| !chunks.iter().any(|item| item == pos))
         .filter(|pos| center_pos.distance(pos.center()) <= block_distance)
         .collect_vec();
+
+    positions.sort_by(|a, b| {
+        a.center()
+            .distance(transform.translation)
+            .total_cmp(&b.center().distance(transform.translation))
+    });
 
     for pos in positions {
         let material = StandardMaterial {
