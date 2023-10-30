@@ -24,8 +24,14 @@ mod level;
 mod player;
 mod position;
 
+#[derive(Resource, Default)]
+pub struct ChunkMaterial {
+    pub handle: Handle<StandardMaterial>,
+}
+
 fn main() {
     App::new()
+        .init_resource::<ChunkMaterial>()
         .init_resource::<SharedBlockRegistry>()
         .insert_resource(ClearColor(Color::rgb(0.2, 0.5, 0.8)))
         .insert_resource(AmbientLight {
@@ -43,8 +49,28 @@ fn main() {
         .add_plugins(ConfigPlugin)
         .add_plugins(PlayerPlugin)
         .add_plugins(LevelGenPlugin)
-        .add_systems(Startup, (setup_level, setup_world, register_blocks))
+        .add_systems(
+            Startup,
+            (setup_handles, setup_level, setup_world, register_blocks),
+        )
         .run();
+}
+
+fn setup_handles(
+    mut chunk_material: ResMut<ChunkMaterial>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    server: Res<AssetServer>,
+) {
+    let texture_handle = server.load("blocks/dirt.png");
+
+    let material = StandardMaterial {
+        base_color_texture: Some(texture_handle),
+        perceptual_roughness: 1.0,
+        reflectance: 0.0,
+        ..default()
+    };
+
+    chunk_material.handle = materials.add(material);
 }
 
 fn setup_level(mut commands: Commands) {

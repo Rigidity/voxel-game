@@ -22,10 +22,6 @@ pub struct Level {
 }
 
 impl Level {
-    pub fn is_loaded(&self, position: ChunkPos) -> bool {
-        self.loaded_chunks.contains_key(&position)
-    }
-
     pub fn add_chunk(&mut self, position: ChunkPos, chunk: Chunk) {
         self.loaded_chunks.insert(position, chunk);
     }

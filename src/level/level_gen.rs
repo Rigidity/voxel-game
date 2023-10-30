@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use async_io::block_on;
 use bevy::{
@@ -10,12 +10,15 @@ use bevy_rapier3d::prelude::*;
 use futures_lite::future;
 use itertools::Itertools;
 use noise::{NoiseFn, Perlin};
+use rusqlite::Connection;
 
 use crate::{
     block_registry::{BlockRegistry, SharedBlockRegistry},
+    config::Config,
     level::{Chunk, Dirty, Level, CHUNK_SIZE},
     player::Player,
     position::{BlockPos, ChunkPos},
+    ChunkMaterial,
 };
 
 use super::{build_chunk, AdjacentChunkData};
@@ -26,20 +29,11 @@ pub struct MeshTask(Task<(Mesh, Option<Collider>)>);
 #[derive(Component)]
 pub struct GenerateTask(Task<Chunk>);
 
-#[derive(Resource)]
-struct ChunkDistance(usize);
-
-impl Default for ChunkDistance {
-    fn default() -> Self {
-        Self(8)
-    }
-}
-
 pub struct LevelGenPlugin;
 
 impl Plugin for LevelGenPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<ChunkDistance>().add_systems(
+        app.add_systems(
             Update,
             (
                 (load_chunks, add_chunks, remove_chunks),
@@ -51,92 +45,78 @@ impl Plugin for LevelGenPlugin {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+fn visible_chunk_positions(player_pos: Vec3, distance: i32) -> Vec<ChunkPos> {
+    let chunk_pos = BlockPos::from(player_pos).chunk_pos().0;
+    let center_pos = chunk_pos.center();
+    let block_distance = distance * CHUNK_SIZE as i32;
+
+    (-distance..=distance)
+        .cartesian_product(-distance..=distance)
+        .cartesian_product(-distance..=distance)
+        .map(|((x, y), z)| chunk_pos + ChunkPos::new(x, y, z))
+        .filter(|pos| center_pos.distance(pos.center()) <= block_distance as f32)
+        .sorted_by(|a, b| {
+            a.center()
+                .distance(player_pos)
+                .total_cmp(&b.center().distance(player_pos))
+        })
+        .collect_vec()
+}
+
 fn load_chunks(
     mut commands: Commands,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    config: Res<Config>,
     level: Res<Level>,
+    chunk_material: Res<ChunkMaterial>,
     registry: Res<SharedBlockRegistry>,
-    max_distance: Res<ChunkDistance>,
     chunks: Query<&ChunkPos>,
     player: Query<&Transform, With<Player>>,
-    server: Res<AssetServer>,
 ) {
     let thread_pool = AsyncComputeTaskPool::get();
-    let handle = server.load("blocks/dirt.png");
-    let block_distance = (max_distance.0 * CHUNK_SIZE) as f32;
-    let transform = player.single();
+    let player_pos = player.single().translation;
 
-    let player_chunk_pos = BlockPos::new(
-        transform.translation.x as i32,
-        transform.translation.y as i32,
-        transform.translation.z as i32,
-    )
-    .chunk_pos()
-    .0;
-    let center_pos = player_chunk_pos.center();
+    for pos in visible_chunk_positions(player_pos, config.render_distance)
+        .into_iter()
+        .filter(|pos| !chunks.iter().any(|existing| existing == pos))
+    {
+        let mut entity = commands.spawn(pos);
 
-    let d = max_distance.0 as i32;
+        entity
+            .insert(chunk_material.handle.clone())
+            .insert(TransformBundle::from(Transform {
+                translation: BlockPos::from(pos).into(),
+                ..default()
+            }))
+            .insert(VisibilityBundle::default())
+            .insert(Friction::new(0.25))
+            .insert(Dirty);
 
-    let mut positions =
-        // x
-        (-d..=d).flat_map(|x| {
-            // y
-            (-d..=d).flat_map(move |y| {
-                // z
-                (-d..=d).map(move |z| player_chunk_pos + ChunkPos::new(x, y, z))
-            })
-        })
-        .filter(|pos| !chunks.iter().any(|item| item == pos))
-        .filter(|pos| center_pos.distance(pos.center()) <= block_distance)
-        .collect_vec();
+        let registry = Arc::clone(&registry);
+        let connection = Arc::clone(&level.connection);
+        let task = thread_pool.spawn(load_chunk(pos, level.noise(), registry, connection));
 
-    positions.sort_by(|a, b| {
-        a.center()
-            .distance(transform.translation)
-            .total_cmp(&b.center().distance(transform.translation))
-    });
+        entity.insert(GenerateTask(task));
+    }
+}
 
-    for pos in positions {
-        let material = StandardMaterial {
-            base_color_texture: Some(handle.clone()),
-            perceptual_roughness: 1.0,
-            reflectance: 0.0,
-            ..default()
-        };
+async fn load_chunk(
+    pos: ChunkPos,
+    noise: Perlin,
+    registry: Arc<RwLock<BlockRegistry>>,
+    connection: Arc<Mutex<Connection>>,
+) -> Chunk {
+    let conn = connection.lock().unwrap();
 
-        let mut entity = commands.spawn((
-            pos,
-            materials.add(material),
-            TransformBundle::from_transform(Transform::from_translation(Vec3::from(
-                BlockPos::from(pos),
-            ))),
-            VisibilityBundle::default(),
-            Friction::new(0.25),
-            Dirty,
-        ));
+    let result = conn.query_row(
+        "SELECT `data` FROM `chunks` WHERE `x` = ?1 AND `y` = ?2 AND `z` = ?3",
+        (pos.x, pos.y, pos.z),
+        |row| row.get::<_, Vec<u8>>(0),
+    );
 
-        if !level.is_loaded(pos) {
-            let noise = level.noise();
-            let registry = Arc::clone(&registry);
-            let connection = Arc::clone(&level.connection);
-            let task = thread_pool.spawn(async move {
-                let conn = connection.lock().unwrap();
-
-                let result = conn.query_row(
-                    "SELECT `data` FROM `chunks` WHERE `x` = ?1 AND `y` = ?2 AND `z` = ?3",
-                    (pos.x, pos.y, pos.z),
-                    |row| row.get::<_, Vec<u8>>(0),
-                );
-
-                if let Ok(bytes) = result {
-                    Chunk::deserialize(&bytes, &registry.read().unwrap())
-                } else {
-                    generate_chunk(noise, pos, registry)
-                }
-            });
-            entity.insert(GenerateTask(task));
-        }
+    if let Ok(bytes) = result {
+        Chunk::deserialize(&bytes, &registry.read().unwrap())
+    } else {
+        generate_chunk(noise, pos, registry)
     }
 }
 
@@ -182,17 +162,17 @@ fn add_chunks(
 fn remove_chunks(
     mut commands: Commands,
     mut level: ResMut<Level>,
-    max_distance: Res<ChunkDistance>,
+    config: Res<Config>,
     chunks: Query<(Entity, &ChunkPos)>,
     player: Query<&Transform, With<Player>>,
 ) {
-    let max_distance = (max_distance.0 * CHUNK_SIZE) as f32;
+    let max_distance = config.render_distance * CHUNK_SIZE as i32;
     let transform = player.single();
     let player_chunk_pos = BlockPos::from(transform.translation).chunk_pos().0;
     let player_center_pos = player_chunk_pos.center();
 
     for (chunk, chunk_pos) in chunks.iter() {
-        if player_center_pos.distance(chunk_pos.center()) > max_distance {
+        if player_center_pos.distance(chunk_pos.center()) > max_distance as f32 {
             commands.entity(chunk).despawn_recursive();
             level.remove_chunk(chunk_pos);
         }

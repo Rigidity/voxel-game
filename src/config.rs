@@ -42,6 +42,7 @@ fn save_config(config: Res<Config>) {
 
 #[derive(Resource, Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
+    pub render_distance: i32,
     pub mouse_sensitivity: f32,
     pub movement_speed: f32,
     pub movement_controls: MovementControls,
@@ -50,6 +51,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            render_distance: 8,
             mouse_sensitivity: 0.00012,
             movement_speed: 70.0,
             movement_controls: MovementControls::default(),
