@@ -216,108 +216,72 @@ fn generate_meshes(
             continue;
         };
 
-        let left = level.chunk(pos - ChunkPos::X).map(|chunk| {
-            let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
-            for (y, data) in data.iter_mut().enumerate() {
-                for (z, data) in data.iter_mut().enumerate() {
-                    *data = chunk.block(CHUNK_SIZE - 1, y, z).is_some();
-                }
-            }
-            data
-        });
+        macro_rules! adjacent_faces {
+            ( $main:ident, $( $name:ident, $pos:expr, |$row_name:ident, $cell_name:ident|
+                    => [$x:expr, $y:expr, $z:expr]; )* ) => {
+                $( let $name = level.chunk($pos).map(|chunk| {
+                    let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
+                    for ($row_name, data) in data.iter_mut().enumerate() {
+                        for ($cell_name, data) in data.iter_mut().enumerate() {
+                            *data = chunk.block($x, $y, $z).is_some();
+                        }
+                    }
+                    data
+                }); )*
 
-        let right = level.chunk(pos + ChunkPos::X).map(|chunk| {
-            let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
-            for (y, data) in data.iter_mut().enumerate() {
-                for (z, data) in data.iter_mut().enumerate() {
-                    *data = chunk.block(0, y, z).is_some();
-                }
-            }
-            data
-        });
+                let $main = AdjacentChunkData { $( $name, )* };
+            };
+        }
 
-        let top = level.chunk(pos + ChunkPos::Y).map(|chunk| {
-            let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
-            for (x, data) in data.iter_mut().enumerate() {
-                for (z, data) in data.iter_mut().enumerate() {
-                    *data = chunk.block(x, 0, z).is_some();
-                }
-            }
-            data
-        });
-
-        let bottom = level.chunk(pos - ChunkPos::Y).map(|chunk| {
-            let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
-            for (x, data) in data.iter_mut().enumerate() {
-                for (z, data) in data.iter_mut().enumerate() {
-                    *data = chunk.block(x, CHUNK_SIZE - 1, z).is_some();
-                }
-            }
-            data
-        });
-
-        let front = level.chunk(pos + ChunkPos::Z).map(|chunk| {
-            let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
-            for (x, data) in data.iter_mut().enumerate() {
-                for (y, data) in data.iter_mut().enumerate() {
-                    *data = chunk.block(x, y, 0).is_some();
-                }
-            }
-            data
-        });
-
-        let back = level.chunk(pos - ChunkPos::Z).map(|chunk| {
-            let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
-            for (x, data) in data.iter_mut().enumerate() {
-                for (y, data) in data.iter_mut().enumerate() {
-                    *data = chunk.block(x, y, CHUNK_SIZE - 1).is_some();
-                }
-            }
-            data
-        });
-
-        let adjacent = AdjacentChunkData {
-            left,
-            right,
-            top,
-            bottom,
-            front,
-            back,
-        };
+        adjacent_faces!(adjacent,
+            left, pos - ChunkPos::X, |y, z| => [CHUNK_SIZE - 1, y, z];
+            right, pos + ChunkPos::X, |y, z| => [0, y, z];
+            top, pos + ChunkPos::Y, |x, z| => [x, 0, z];
+            bottom, pos - ChunkPos::Y, |x, z| => [x, CHUNK_SIZE - 1, z];
+            front, pos + ChunkPos::Z, |x, y| => [x, y, 0];
+            back, pos - ChunkPos::Z, |x, y| => [x, y, CHUNK_SIZE - 1];
+        );
 
         let registry = Arc::clone(&registry);
         let connection = Arc::clone(&level.connection);
-
-        let task = thread_pool.spawn(async move {
-            let data = chunk.serialize(&registry.read().unwrap());
-            let conn = connection.lock().unwrap();
-
-            if conn
-                .query_row(
-                    "SELECT COUNT(*) FROM `chunks` WHERE `x` = ?1 AND `y` = ?2 AND `z` = ?3",
-                    (pos.x, pos.y, pos.z),
-                    |row| row.get::<_, usize>(0),
-                )
-                .unwrap()
-                == 0
-            {
-                conn.execute(
-                    "INSERT INTO `chunks` (`x`, `y`, `z`, `data`) VALUES (?1, ?2, ?3, ?4)",
-                    (pos.x, pos.y, pos.z, data),
-                )
-                .unwrap();
-            } else {
-                conn.execute(
-                    "UPDATE `chunks` SET `data` = ?1 WHERE `x` = ?2 AND `y` = ?3 AND `z` = ?4",
-                    (data, pos.x, pos.y, pos.z),
-                )
-                .unwrap();
-            }
-
-            drop(conn);
-            build_chunk(adjacent, chunk, registry)
-        });
+        let task = thread_pool.spawn(save_chunk(pos, chunk, adjacent, registry, connection));
 
         entity.remove::<Dirty>().insert(MeshTask(task));
     }
+}
+
+async fn save_chunk(
+    pos: ChunkPos,
+    chunk: Chunk,
+    adjacent: AdjacentChunkData,
+    registry: Arc<RwLock<BlockRegistry>>,
+    connection: Arc<Mutex<Connection>>,
+) -> (Mesh, Option<Collider>) {
+    let data = chunk.serialize(&registry.read().unwrap());
+    let conn = connection.lock().unwrap();
+
+    if conn
+        .query_row(
+            "SELECT COUNT(*) FROM `chunks` WHERE `x` = ?1 AND `y` = ?2 AND `z` = ?3",
+            (pos.x, pos.y, pos.z),
+            |row| row.get::<_, usize>(0),
+        )
+        .unwrap()
+        == 0
+    {
+        conn.execute(
+            "INSERT INTO `chunks` (`x`, `y`, `z`, `data`) VALUES (?1, ?2, ?3, ?4)",
+            (pos.x, pos.y, pos.z, data),
+        )
+        .unwrap();
+    } else {
+        conn.execute(
+            "UPDATE `chunks` SET `data` = ?1 WHERE `x` = ?2 AND `y` = ?3 AND `z` = ?4",
+            (data, pos.x, pos.y, pos.z),
+        )
+        .unwrap();
+    }
+
+    drop(conn);
+    build_chunk(adjacent, chunk, registry)
 }
