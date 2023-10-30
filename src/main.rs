@@ -42,7 +42,17 @@ fn main() {
             gravity: Vec3::Y * -9.81 * 2.5,
             ..default()
         })
-        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+        .add_plugins(
+            DefaultPlugins
+                .set(ImagePlugin::default_nearest())
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "Voxel Game".into(),
+                        ..default()
+                    }),
+                    ..default()
+                }),
+        )
         .add_plugins(TemporalAntiAliasPlugin)
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugins(FpsCounterPlugin)

@@ -129,6 +129,16 @@ impl ChunkPos {
             (block_pos.z + add) as f32,
         )
     }
+
+    pub fn is_adjacent(self, pos: ChunkPos) -> bool {
+        let is_left = pos == self - ChunkPos::X;
+        let is_right = pos == self + ChunkPos::X;
+        let is_bottom = pos == self - ChunkPos::Y;
+        let is_top = pos == self + ChunkPos::Y;
+        let is_back = pos == self - ChunkPos::Z;
+        let is_front = pos == self + ChunkPos::Z;
+        is_left || is_right || is_bottom || is_top || is_back || is_front
+    }
 }
 
 impl From<ChunkPos> for Vec3 {

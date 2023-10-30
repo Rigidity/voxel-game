@@ -105,9 +105,7 @@ async fn load_chunk(
     registry: Arc<RwLock<BlockRegistry>>,
     connection: Arc<Mutex<Connection>>,
 ) -> Chunk {
-    let conn = connection.lock().unwrap();
-
-    let result = conn.query_row(
+    let result = connection.lock().unwrap().query_row(
         "SELECT `data` FROM `chunks` WHERE `x` = ?1 AND `y` = ?2 AND `z` = ?3",
         (pos.x, pos.y, pos.z),
         |row| row.get::<_, Vec<u8>>(0),
@@ -148,13 +146,24 @@ fn generate_chunk(
 fn add_chunks(
     mut commands: Commands,
     mut level: ResMut<Level>,
-    mut query: Query<(Entity, &ChunkPos, &mut GenerateTask)>,
+    mut loading_chunks: Query<(Entity, &ChunkPos, &mut GenerateTask)>,
+    chunks: Query<(Entity, &ChunkPos), (Without<GenerateTask>, Without<Dirty>)>,
 ) {
-    for (entity, &chunk_pos, mut generate_task) in query.iter_mut() {
-        if let Some(chunk) = block_on(future::poll_once(&mut generate_task.0)) {
-            let mut entity = commands.entity(entity);
-            entity.remove::<GenerateTask>();
-            level.add_chunk(chunk_pos, chunk)
+    for (entity, &pos, mut generate_task) in loading_chunks.iter_mut() {
+        let Some(chunk) = block_on(future::poll_once(&mut generate_task.0)) else {
+            continue;
+        };
+
+        let mut entity = commands.entity(entity);
+        entity.remove::<GenerateTask>();
+        level.add_chunk(pos, chunk);
+
+        for (adjacent, &adjacent_pos) in chunks.iter() {
+            if !pos.is_adjacent(adjacent_pos) {
+                continue;
+            }
+
+            commands.entity(adjacent).insert(Dirty);
         }
     }
 }
