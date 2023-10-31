@@ -63,11 +63,9 @@ fn setup_player(mut commands: Commands) {
                 .insert(TemporalAntiAliasBundle::default())
                 .insert(FogSettings {
                     falloff: FogFalloff::Linear {
-                        start: (CHUNK_SIZE * 6) as f32,
+                        start: (CHUNK_SIZE * 5) as f32,
                         end: (CHUNK_SIZE * 7) as f32,
                     },
-                    color: Color::rgb(0.1, 0.0, 1.0),
-                    directional_light_color: Color::rgb(0.1, 0.0, 1.0),
                     ..default()
                 })
                 .insert(Camera3dBundle {

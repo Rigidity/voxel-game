@@ -35,7 +35,7 @@ fn main() {
     App::new()
         .init_resource::<ChunkMaterial>()
         .init_resource::<SharedBlockRegistry>()
-        .insert_resource(ClearColor(Color::rgb(0.1, 0.0, 1.0)))
+        .insert_resource(ClearColor(Color::WHITE))
         .insert_resource(AmbientLight {
             brightness: 0.8,
             ..default()
