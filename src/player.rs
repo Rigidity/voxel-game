@@ -238,21 +238,18 @@ fn player_move(
 
         let mut movement = Vec3::ZERO;
 
-        if keyboard.pressed(config.movement_controls.move_forward) {
-            movement += forward;
+        macro_rules! apply {
+            ($op:tt $dir:ident if $key:ident) => {
+                if keyboard.pressed(config.movement_controls.$key) {
+                    movement $op $dir;
+                }
+            };
         }
 
-        if keyboard.pressed(config.movement_controls.move_backward) {
-            movement -= forward;
-        }
-
-        if keyboard.pressed(config.movement_controls.strafe_left) {
-            movement -= right;
-        }
-
-        if keyboard.pressed(config.movement_controls.strafe_right) {
-            movement += right;
-        }
+        apply!(+= forward if move_forward);
+        apply!(-= forward if move_backward);
+        apply!(+= right if strafe_right);
+        apply!(-= right if strafe_left);
 
         velocity.linvel +=
             movement.normalize_or_zero() * time.delta_seconds() * config.movement_speed;
