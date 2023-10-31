@@ -36,9 +36,9 @@ impl Plugin for LevelGenPlugin {
         app.add_systems(
             Update,
             (
-                (load_chunks, add_chunks, remove_chunks),
+                (load_chunks, remove_chunks),
                 apply_deferred,
-                (generate_meshes, insert_meshes),
+                (add_chunks, generate_meshes, insert_meshes),
             )
                 .chain(),
         );

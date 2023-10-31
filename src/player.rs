@@ -1,7 +1,7 @@
 use std::f32::consts::FRAC_PI_2;
 
 use bevy::{
-    core_pipeline::experimental::taa::TemporalAntiAliasBundle,
+    core_pipeline::{experimental::taa::TemporalAntiAliasBundle, tonemapping::Tonemapping},
     ecs::event::ManualEventReader,
     input::mouse::MouseMotion,
     pbr::ScreenSpaceAmbientOcclusionBundle,
@@ -52,6 +52,7 @@ fn setup_player(mut commands: Commands) {
         .insert(Collider::cuboid(0.4, 0.8, 0.4))
         .insert(RigidBody::Dynamic)
         .insert(LockedAxes::ROTATION_LOCKED)
+        .insert(Ccd::enabled())
         .insert(Velocity::default())
         .insert(Transform::from_xyz(0.0, 20.0, 0.0))
         .insert(Friction::new(0.0))
@@ -63,8 +64,10 @@ fn setup_player(mut commands: Commands) {
                 .insert(FogSettings {
                     falloff: FogFalloff::Linear {
                         start: (CHUNK_SIZE * 6) as f32,
-                        end: (CHUNK_SIZE * 8) as f32,
+                        end: (CHUNK_SIZE * 7) as f32,
                     },
+                    color: Color::rgb(0.1, 0.0, 1.0),
+                    directional_light_color: Color::rgb(0.1, 0.0, 1.0),
                     ..default()
                 })
                 .insert(Camera3dBundle {
@@ -73,6 +76,7 @@ fn setup_player(mut commands: Commands) {
                         fov: FRAC_PI_2,
                         ..default()
                     }),
+                    tonemapping: Tonemapping::None,
                     ..default()
                 });
         });

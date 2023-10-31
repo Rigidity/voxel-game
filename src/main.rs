@@ -14,6 +14,7 @@ use block_registry::SharedBlockRegistry;
 use config::ConfigPlugin;
 use level::{Level, LevelGenPlugin};
 use noise::Perlin;
+use overlay::OverlayPlugin;
 use player::PlayerPlugin;
 use rusqlite::Connection;
 
@@ -21,6 +22,7 @@ mod block;
 mod block_registry;
 mod config;
 mod level;
+mod overlay;
 mod player;
 mod position;
 
@@ -33,7 +35,7 @@ fn main() {
     App::new()
         .init_resource::<ChunkMaterial>()
         .init_resource::<SharedBlockRegistry>()
-        .insert_resource(ClearColor(Color::rgb(0.2, 0.5, 0.8)))
+        .insert_resource(ClearColor(Color::rgb(0.1, 0.0, 1.0)))
         .insert_resource(AmbientLight {
             brightness: 0.8,
             ..default()
@@ -58,6 +60,7 @@ fn main() {
         .add_plugins(FpsCounterPlugin)
         .add_plugins(ConfigPlugin)
         .add_plugins(PlayerPlugin)
+        .add_plugins(OverlayPlugin)
         .add_plugins(LevelGenPlugin)
         .add_systems(
             Startup,
