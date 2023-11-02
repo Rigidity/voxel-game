@@ -1,44 +1,67 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use bevy::{prelude::Resource, utils::HashMap};
-use noise::Perlin;
-use rusqlite::Connection;
+use bevy::{prelude::*, utils::HashMap};
+use parking_lot::RwLock;
 
-use crate::position::ChunkPos;
+use crate::{config::Config, player::Player, position::ChunkPos};
 
+mod adjacent_sides;
 mod chunk;
-mod chunk_builder;
-mod level_gen;
+mod chunk_data;
+mod chunk_generator;
+mod chunk_loader;
+mod mesh_builder;
+mod visible_chunks;
 
-pub use chunk::*;
-pub use chunk_builder::*;
-pub use level_gen::*;
+pub use chunk_data::CHUNK_SIZE;
 
-#[derive(Resource)]
-pub struct Level {
-    pub connection: Arc<Mutex<Connection>>,
-    pub loaded_chunks: HashMap<ChunkPos, Chunk>,
-    pub noise: Perlin,
+use self::{chunk::Chunk, visible_chunks::visible_chunks};
+
+#[derive(Resource, Default, Clone, Deref, DerefMut)]
+struct SharedLevel(Arc<RwLock<Level>>);
+
+#[derive(Default)]
+struct Level {
+    loaded_chunks: HashMap<ChunkPos, Chunk>,
 }
 
 impl Level {
-    pub fn add_chunk(&mut self, position: ChunkPos, chunk: Chunk) {
-        self.loaded_chunks.insert(position, chunk);
+    fn chunk(&self, pos: ChunkPos) -> Option<&Chunk> {
+        self.loaded_chunks.get(&pos)
     }
+}
 
-    pub fn remove_chunk(&mut self, position: &ChunkPos) {
-        self.loaded_chunks.remove(position);
+pub struct LevelPlugin;
+
+impl Plugin for LevelPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<SharedLevel>()
+            .add_systems(Update, load_chunks);
     }
+}
 
-    pub fn chunk(&self, position: ChunkPos) -> Option<&Chunk> {
-        self.loaded_chunks.get(&position)
-    }
+fn load_chunks(
+    mut commands: Commands,
+    config: Res<Config>,
+    level: Res<SharedLevel>,
+    chunks: Query<(Entity, &ChunkPos)>,
+    player: Query<&Transform, With<Player>>,
+) {
+    let transform = player.single();
+    let chunk_pos = ChunkPos::from(transform.translation);
 
-    pub fn chunk_mut(&mut self, position: ChunkPos) -> Option<&mut Chunk> {
-        self.loaded_chunks.get_mut(&position)
-    }
+    let visible = visible_chunks(chunk_pos, config.render_distance);
 
-    pub fn noise(&self) -> Perlin {
-        self.noise
+    for pos in visible
+        .iter()
+        .filter(|pos| chunks.iter().any(|ex| ex.1 == *pos))
+    {}
+
+    for entity in chunks
+        .iter()
+        .filter(|ex| !visible.contains(ex.1))
+        .map(|ex| ex.0)
+    {
+        commands.entity(entity).despawn_recursive();
     }
 }

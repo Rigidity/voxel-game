@@ -15,31 +15,6 @@ impl Plugin for ConfigPlugin {
     }
 }
 
-fn write_config_file(config: &Config) {
-    let pretty = PrettyConfig::new();
-    let text = ron::ser::to_string_pretty(&config, pretty).unwrap();
-    fs::write(CONFIG_PATH, text).unwrap();
-}
-
-fn load_config(mut commands: Commands) {
-    let config = if Path::new(CONFIG_PATH).exists() {
-        let text = fs::read_to_string(CONFIG_PATH).unwrap();
-        ron::from_str(&text).unwrap()
-    } else {
-        let config = Config::default();
-        write_config_file(&config);
-        config
-    };
-
-    commands.insert_resource(config);
-}
-
-fn save_config(config: Res<Config>) {
-    if config.is_changed() && !config.is_added() {
-        write_config_file(&config);
-    }
-}
-
 #[derive(Resource, Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub render_distance: i32,
@@ -79,5 +54,30 @@ impl Default for MovementControls {
             jump: KeyCode::Space,
             descend: KeyCode::ShiftLeft,
         }
+    }
+}
+
+fn write_config_file(config: &Config) {
+    let pretty = PrettyConfig::new();
+    let text = ron::ser::to_string_pretty(&config, pretty).unwrap();
+    fs::write(CONFIG_PATH, text).unwrap();
+}
+
+fn load_config(mut commands: Commands) {
+    let config = if Path::new(CONFIG_PATH).exists() {
+        let text = fs::read_to_string(CONFIG_PATH).unwrap();
+        ron::from_str(&text).unwrap()
+    } else {
+        let config = Config::default();
+        write_config_file(&config);
+        config
+    };
+
+    commands.insert_resource(config);
+}
+
+fn save_config(config: Res<Config>) {
+    if config.is_changed() && !config.is_added() {
+        write_config_file(&config);
     }
 }

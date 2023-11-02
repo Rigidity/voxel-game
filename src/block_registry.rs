@@ -1,16 +1,14 @@
-use std::{
-    num::NonZeroU16,
-    sync::{Arc, RwLock},
-};
+use std::{num::NonZeroU16, sync::Arc};
 
 use bevy::{prelude::*, utils::HashMap};
+use parking_lot::RwLock;
 
 use crate::block::Block;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BlockId(NonZeroU16);
 
-#[derive(Resource, Default, Deref, DerefMut)]
+#[derive(Resource, Clone, Default, Deref, DerefMut)]
 pub struct SharedBlockRegistry(Arc<RwLock<BlockRegistry>>);
 
 #[derive(Default)]

@@ -12,7 +12,7 @@ use bevy_rapier3d::prelude::*;
 
 use crate::{
     config::Config,
-    level::{Dirty, Level, CHUNK_SIZE},
+    level::CHUNK_SIZE,
     position::{BlockPos, ChunkPos},
 };
 
@@ -166,7 +166,9 @@ fn raycast_blocks(
     // Traverse the grid up to max_distance
     for _ in 0..max_distance {
         // Check for a block at the current position
-        let (chunk_pos, (rx, ry, rz)) = BlockPos::new(x, y, z).chunk_pos();
+        let block_pos = BlockPos::new(x, y, z);
+        let chunk_pos = ChunkPos::from(block_pos);
+        let (rx, ry, rz) = block_pos.block_in_chunk();
         if let Some(chunk) = level.chunk(chunk_pos) {
             if chunk.block(rx, ry, rz).is_some() {
                 return Ok((x, y, z));

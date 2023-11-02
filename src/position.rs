@@ -36,22 +36,11 @@ impl BlockPos {
         Self { x, y, z }
     }
 
-    pub fn chunk_pos(self) -> (ChunkPos, (usize, usize, usize)) {
-        let (chunk_x, block_x) = (
-            div_floor(self.x, CHUNK_SIZE as i32),
-            self.x.rem_euclid(CHUNK_SIZE as i32),
-        );
-        let (chunk_y, block_y) = (
-            div_floor(self.y, CHUNK_SIZE as i32),
-            self.y.rem_euclid(CHUNK_SIZE as i32),
-        );
-        let (chunk_z, block_z) = (
-            div_floor(self.z, CHUNK_SIZE as i32),
-            self.z.rem_euclid(CHUNK_SIZE as i32),
-        );
+    pub fn block_in_chunk(self) -> (usize, usize, usize) {
         (
-            ChunkPos::new(chunk_x, chunk_y, chunk_z),
-            (block_x as usize, block_y as usize, block_z as usize),
+            self.x.rem_euclid(CHUNK_SIZE as i32) as usize,
+            self.y.rem_euclid(CHUNK_SIZE as i32) as usize,
+            self.z.rem_euclid(CHUNK_SIZE as i32) as usize,
         )
     }
 }
@@ -147,31 +136,42 @@ impl From<ChunkPos> for Vec3 {
     }
 }
 
+impl From<Vec3> for ChunkPos {
+    fn from(value: Vec3) -> Self {
+        BlockPos::from(value).into()
+    }
+}
+
+impl From<BlockPos> for ChunkPos {
+    fn from(value: BlockPos) -> Self {
+        Self::new(
+            div_floor(value.x, CHUNK_SIZE as i32),
+            div_floor(value.y, CHUNK_SIZE as i32),
+            div_floor(value.z, CHUNK_SIZE as i32),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_chunk_pos() {
-        assert_eq!(
-            BlockPos::new(0, 0, 0).chunk_pos(),
-            (ChunkPos::new(0, 0, 0), (0, 0, 0))
-        );
-        assert_eq!(
-            BlockPos::new(5, 0, 0).chunk_pos(),
-            (ChunkPos::new(0, 0, 0), (5, 0, 0))
-        );
-        assert_eq!(
-            BlockPos::new(31, 0, 0).chunk_pos(),
-            (ChunkPos::new(0, 0, 0), (31, 0, 0))
-        );
-        assert_eq!(
-            BlockPos::new(32, 0, 0).chunk_pos(),
-            (ChunkPos::new(1, 0, 0), (0, 0, 0))
-        );
-        assert_eq!(
-            BlockPos::new(-1, 0, 0).chunk_pos(),
-            (ChunkPos::new(-1, 0, 0), (31, 0, 0))
-        );
+        macro_rules! test_rem {
+            ($block_pos:expr => $chunk_pos:expr, $remainder:expr) => {
+                let block_pos = $block_pos;
+                let chunk_pos = ChunkPos::from(block_pos);
+                let remainder = block_pos.block_in_chunk();
+                assert_eq!(chunk_pos, $chunk_pos);
+                assert_eq!(remainder, $remainder);
+            };
+        }
+
+        test_rem!(BlockPos::new(0, 0, 0) => ChunkPos::new(0, 0, 0), (0, 0, 0));
+        test_rem!(BlockPos::new(5, 0, 0) => ChunkPos::new(0, 0, 0), (5, 0, 0));
+        test_rem!(BlockPos::new(31, 0, 0) => ChunkPos::new(0, 0, 0), (31, 0, 0));
+        test_rem!(BlockPos::new(32, 0, 0) => ChunkPos::new(1, 0, 0), (0, 0, 0));
+        test_rem!(BlockPos::new(-1, 0, 0) => ChunkPos::new(-1, 0, 0), (31, 0, 0));
     }
 }
