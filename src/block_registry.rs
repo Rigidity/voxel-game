@@ -9,15 +9,15 @@ use crate::block::Block;
 pub struct BlockId(NonZeroU16);
 
 #[derive(Resource, Clone, Default, Deref, DerefMut)]
-pub struct SharedBlockRegistry(Arc<RwLock<BlockRegistry>>);
+pub struct BlockRegistry(Arc<RwLock<BlockRegistryInner>>);
 
 #[derive(Default)]
-pub struct BlockRegistry {
+pub struct BlockRegistryInner {
     names: HashMap<String, BlockId>,
     blocks: Vec<Block>,
 }
 
-impl BlockRegistry {
+impl BlockRegistryInner {
     pub fn register(&mut self, name: String, block: Block) {
         let len: u16 = self.blocks.len().try_into().unwrap();
         let id = BlockId(NonZeroU16::new(len + 1).unwrap());

@@ -38,7 +38,11 @@ impl ChunkData {
             let name_len = bytes[i] as usize;
             i += 1;
 
-            names.push(registry.block_id(&String::from_utf8_lossy(&bytes[i..i + name_len])));
+            names.push(
+                registry
+                    .read()
+                    .block_id(&String::from_utf8_lossy(&bytes[i..i + name_len])),
+            );
             i += name_len;
         }
 
@@ -73,7 +77,7 @@ impl ChunkData {
 
         for block in self.blocks.iter() {
             let index = block
-                .map(|id| names.insert_full(registry.name(id)).0 + 1)
+                .map(|id| names.insert_full(registry.read().name(id).to_string()).0 + 1)
                 .unwrap_or_default();
 
             if last == Some(index) {

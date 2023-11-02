@@ -1,8 +1,8 @@
 use bevy::prelude::Vec3;
 
-use crate::level::{AdjacentBlocks, ChunkBuilder};
+use crate::level::{AdjacentBlocks, MeshBuilder};
 
-pub fn render_dirt(chunk: &mut ChunkBuilder, adjacent: AdjacentBlocks, position: Vec3) {
+pub fn render_dirt(chunk: &mut MeshBuilder, adjacent: AdjacentBlocks, position: Vec3) {
     let x = position.x;
     let y = position.y;
     let z = position.z;

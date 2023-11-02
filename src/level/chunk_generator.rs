@@ -1,11 +1,11 @@
 use itertools::Itertools;
 use noise::{NoiseFn, Perlin};
 
-use crate::{block_registry::SharedBlockRegistry, position::ChunkPos};
+use crate::{block_registry::BlockRegistry, position::ChunkPos};
 
 use super::chunk_data::{ChunkData, CHUNK_SIZE};
 
-pub fn generate_chunk(noise: &Perlin, registry: &SharedBlockRegistry, pos: ChunkPos) -> ChunkData {
+pub fn generate_chunk(noise: &Perlin, registry: &BlockRegistry, pos: ChunkPos) -> ChunkData {
     let mut chunk = ChunkData::default();
     let dirt = registry.read().block_id("dirt");
 
