@@ -12,7 +12,7 @@ use bevy_rapier3d::prelude::*;
 
 use crate::{
     config::Config,
-    level::{Level, CHUNK_SIZE},
+    level::{Dirty, Level, CHUNK_SIZE},
     position::{BlockPos, ChunkPos},
 };
 
@@ -114,7 +114,7 @@ fn remove_block(
                 .find(|entity| entity.1 == &chunk_pos)
                 .map(|entity| entity.0)
             {
-                commands.entity(entity).remove::<Handle<Mesh>>();
+                commands.entity(entity).insert(Dirty);
 
                 for adjacent in [
                     chunk_pos - ChunkPos::X,
@@ -125,7 +125,7 @@ fn remove_block(
                     chunk_pos + ChunkPos::Z,
                 ] {
                     if let Some((entity, _)) = chunk_query.iter().find(|e| e.1 == &adjacent) {
-                        commands.entity(entity).remove::<Handle<Mesh>>();
+                        commands.entity(entity).insert(Dirty);
                     }
                 }
             }
