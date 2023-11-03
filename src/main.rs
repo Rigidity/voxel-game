@@ -38,7 +38,7 @@ fn main() {
         )
         .init_resource::<BlockRegistry>()
         .init_resource::<ChunkMaterial>()
-        .insert_resource(ClearColor(Color::BLUE))
+        .insert_resource(ClearColor(Color::BLACK))
         .insert_resource(AmbientLight {
             brightness: 0.8,
             ..default()

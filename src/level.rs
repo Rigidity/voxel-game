@@ -50,6 +50,12 @@ pub struct LevelInner {
     perlin_noise: Perlin,
 }
 
+impl LevelInner {
+    pub fn chunk(&self, pos: ChunkPos) -> Option<&Chunk> {
+        self.loaded_chunks.get(&pos)
+    }
+}
+
 #[derive(Resource, Clone, Deref, DerefMut)]
 pub struct Database(Arc<Mutex<Connection>>);
 
