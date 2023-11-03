@@ -17,7 +17,8 @@ impl ChunkLoader {
         let (sender, receiver) = mpsc::channel();
         std::thread::spawn(move || {
             while let Ok(pos) = receiver.recv() {
-                if level.read().loaded_chunks.contains_key(&pos) {
+                if let Some(chunk) = level.read().loaded_chunks.get(&pos).cloned() {
+                    save_chunk_data(&db, pos, chunk.read().serialize(&registry));
                     continue;
                 }
 
@@ -33,7 +34,7 @@ impl ChunkLoader {
         Self(sender)
     }
 
-    pub fn load(&self, pos: ChunkPos) {
+    pub fn queue(&self, pos: ChunkPos) {
         self.0.send(pos).unwrap();
     }
 }

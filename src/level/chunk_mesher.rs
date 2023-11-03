@@ -2,18 +2,26 @@ use bevy::prelude::{Mesh, Vec3};
 use bevy_rapier3d::prelude::{Collider, ComputedColliderShape};
 use itertools::Itertools;
 
-use crate::block_registry::BlockRegistry;
+use crate::{block_registry::BlockRegistry, position::ChunkPos};
 
-use super::{
-    adjacent_sides::AdjacentChunkData, chunk::Chunk, AdjacentBlocks, MeshBuilder, CHUNK_SIZE,
-};
+use super::{chunk::Chunk, AdjacentBlocks, Level, MeshBuilder, CHUNK_SIZE};
 
 pub fn mesh_chunk(
-    adjacent: AdjacentChunkData,
+    level: Level,
+    pos: ChunkPos,
     chunk: Chunk,
     registry: BlockRegistry,
 ) -> (Mesh, Option<Collider>) {
     let mut mesh_builder = MeshBuilder::new();
+
+    let level = level.read();
+    let left = level.chunk(pos.left()).cloned();
+    let right = level.chunk(pos.right()).cloned();
+    let top = level.chunk(pos.top()).cloned();
+    let bottom = level.chunk(pos.bottom()).cloned();
+    let front = level.chunk(pos.front()).cloned();
+    let back = level.chunk(pos.back()).cloned();
+    drop(level);
 
     for ((x, y), z) in (0..CHUNK_SIZE)
         .cartesian_product(0..CHUNK_SIZE)
@@ -25,32 +33,47 @@ pub fn mesh_chunk(
 
         let adjacent_sides = AdjacentBlocks {
             left: if x == 0 {
-                adjacent.left.map(|data| data[y][z]).unwrap_or(false)
+                left.as_ref()
+                    .map(|chunk| chunk.read().block(CHUNK_SIZE - 1, y, z).is_some())
+                    .unwrap_or(false)
             } else {
                 chunk.read().block(x - 1, y, z).is_some()
             },
             right: if x == CHUNK_SIZE - 1 {
-                adjacent.right.map(|data| data[y][z]).unwrap_or(false)
+                right
+                    .as_ref()
+                    .map(|chunk| chunk.read().block(0, y, z).is_some())
+                    .unwrap_or(false)
             } else {
                 chunk.read().block(x + 1, y, z).is_some()
             },
             bottom: if y == 0 {
-                adjacent.bottom.map(|data| data[x][z]).unwrap_or(false)
+                bottom
+                    .as_ref()
+                    .map(|chunk| chunk.read().block(x, CHUNK_SIZE - 1, z).is_some())
+                    .unwrap_or(false)
             } else {
                 chunk.read().block(x, y - 1, z).is_some()
             },
             top: if y == CHUNK_SIZE - 1 {
-                adjacent.top.map(|data| data[x][z]).unwrap_or(false)
+                top.as_ref()
+                    .map(|chunk| chunk.read().block(x, 0, z).is_some())
+                    .unwrap_or(false)
             } else {
                 chunk.read().block(x, y + 1, z).is_some()
             },
             back: if z == 0 {
-                adjacent.back.map(|data| data[x][y]).unwrap_or(false)
+                back.as_ref()
+                    .map(|chunk| chunk.read().block(x, y, CHUNK_SIZE - 1).is_some())
+                    .unwrap_or(false)
             } else {
                 chunk.read().block(x, y, z - 1).is_some()
             },
             front: if z == CHUNK_SIZE - 1 {
-                adjacent.front.map(|data| data[x][y]).unwrap_or(false)
+                front
+                    .as_ref()
+                    .map(|chunk| chunk.read().block(x, y, 0).is_some())
+                    .unwrap_or(false)
             } else {
                 chunk.read().block(x, y, z + 1).is_some()
             },

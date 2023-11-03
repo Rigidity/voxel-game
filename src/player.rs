@@ -12,7 +12,7 @@ use bevy_rapier3d::prelude::*;
 
 use crate::{
     config::Config,
-    level::{Dirty, Level, CHUNK_SIZE},
+    level::{ChunkLoader, Dirty, Level, CHUNK_SIZE},
     position::{BlockPos, ChunkPos},
 };
 
@@ -49,11 +49,11 @@ fn setup_player(mut commands: Commands) {
     commands
         .spawn(Player)
         .insert(TransformBundle::default())
-        .insert(Collider::cuboid(0.4, 0.8, 0.4))
+        // .insert(Collider::cuboid(0.4, 0.8, 0.4))
         .insert(RigidBody::Dynamic)
         .insert(LockedAxes::ROTATION_LOCKED)
         .insert(Ccd::enabled())
-        .insert(Velocity::default())
+        .insert(Velocity::linear(Vec3::new(0.0, 0.0, 0.0)))
         .insert(Transform::from_xyz(0.0, 20.0, 0.0))
         .insert(Friction::new(0.0))
         .with_children(|commands| {
@@ -85,6 +85,7 @@ fn remove_block(
     mut commands: Commands,
     mut gizmos: Gizmos,
     level: Res<Level>,
+    chunk_loader: Res<ChunkLoader>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
     mouse: Res<Input<MouseButton>>,
     camera: Query<&GlobalTransform, With<PlayerCamera>>,
@@ -98,44 +99,36 @@ fn remove_block(
 
     let transform = camera.single();
 
-    if let Ok((x, y, z)) = raycast_blocks(&level, transform.translation(), transform.forward(), 6) {
-        if mouse.just_pressed(MouseButton::Left) {
-            let block_pos = BlockPos::new(x, y, z);
-            let chunk_pos = ChunkPos::from(block_pos);
-            let relative = block_pos.block_in_chunk();
-            let Some(chunk) = level.read().chunk(chunk_pos).cloned() else {
-                return;
-            };
+    let Ok((x, y, z)) = raycast_blocks(&level, transform.translation(), transform.forward(), 6)
+    else {
+        return;
+    };
 
-            *chunk.write().block_mut(relative.0, relative.1, relative.2) = None;
+    gizmos.cuboid(
+        Transform::from_xyz(x as f32 + 0.5, y as f32 + 0.5, z as f32 + 0.5).with_scale(Vec3::ONE),
+        Color::BLACK,
+    );
 
-            if let Some(entity) = chunk_query
-                .iter()
-                .find(|entity| entity.1 == &chunk_pos)
-                .map(|entity| entity.0)
-            {
-                commands.entity(entity).insert(Dirty);
+    if !mouse.just_pressed(MouseButton::Left) {
+        return;
+    }
 
-                for adjacent in [
-                    chunk_pos - ChunkPos::X,
-                    chunk_pos + ChunkPos::X,
-                    chunk_pos - ChunkPos::Y,
-                    chunk_pos + ChunkPos::Y,
-                    chunk_pos - ChunkPos::Z,
-                    chunk_pos + ChunkPos::Z,
-                ] {
-                    if let Some((entity, _)) = chunk_query.iter().find(|e| e.1 == &adjacent) {
-                        commands.entity(entity).insert(Dirty);
-                    }
-                }
-            }
-        }
+    let block_pos = BlockPos::new(x, y, z);
+    let chunk_pos = ChunkPos::from(block_pos);
+    let relative = block_pos.block_in_chunk();
+    let Some(chunk) = level.read().chunk(chunk_pos).cloned() else {
+        return;
+    };
 
-        gizmos.cuboid(
-            Transform::from_xyz(x as f32 + 0.5, y as f32 + 0.5, z as f32 + 0.5)
-                .with_scale(Vec3::ONE),
-            Color::BLACK,
-        );
+    *chunk.write().block_mut(relative.0, relative.1, relative.2) = None;
+    chunk_loader.queue(chunk_pos);
+
+    if let Some(entity) = chunk_query
+        .iter()
+        .find(|entity| entity.1 == &chunk_pos)
+        .map(|entity| entity.0)
+    {
+        commands.entity(entity).insert(Dirty);
     }
 }
 
@@ -238,6 +231,7 @@ fn player_move(
         let local_z = transform.local_z();
         let forward = -Vec3::new(local_z.x, 0.0, local_z.z);
         let right = Vec3::new(local_z.z, 0.0, -local_z.x);
+        let up = Vec3::Y;
 
         let mut movement = Vec3::ZERO;
 
@@ -251,19 +245,18 @@ fn player_move(
 
         apply!(+= forward if move_forward);
         apply!(-= forward if move_backward);
+        apply!(+= up if jump);
+        apply!(-= up if descend);
         apply!(+= right if strafe_right);
         apply!(-= right if strafe_left);
 
         velocity.linvel +=
             movement.normalize_or_zero() * time.delta_seconds() * config.movement_speed;
-
-        if keyboard.just_pressed(config.movement_controls.jump) {
-            velocity.linvel.y = 9.0;
-        }
     }
 
     let slow_factor = (1.0 - time.delta_seconds() * 8.0).max(0.0);
     velocity.linvel.x *= slow_factor;
+    velocity.linvel.y *= slow_factor;
     velocity.linvel.z *= slow_factor;
 }
 

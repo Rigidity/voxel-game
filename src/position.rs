@@ -119,14 +119,45 @@ impl ChunkPos {
         )
     }
 
+    pub fn left(self) -> ChunkPos {
+        self - ChunkPos::X
+    }
+
+    pub fn right(self) -> ChunkPos {
+        self + ChunkPos::X
+    }
+
+    pub fn top(self) -> ChunkPos {
+        self + ChunkPos::Y
+    }
+
+    pub fn bottom(self) -> ChunkPos {
+        self - ChunkPos::Y
+    }
+
+    pub fn front(self) -> ChunkPos {
+        self + ChunkPos::Z
+    }
+
+    pub fn back(self) -> ChunkPos {
+        self - ChunkPos::Z
+    }
+
+    pub fn adjacent_chunks(self) -> [ChunkPos; 6] {
+        [
+            self.left(),
+            self.right(),
+            self.top(),
+            self.bottom(),
+            self.front(),
+            self.back(),
+        ]
+    }
+
     pub fn is_adjacent(self, pos: ChunkPos) -> bool {
-        let is_left = pos == self - ChunkPos::X;
-        let is_right = pos == self + ChunkPos::X;
-        let is_bottom = pos == self - ChunkPos::Y;
-        let is_top = pos == self + ChunkPos::Y;
-        let is_back = pos == self - ChunkPos::Z;
-        let is_front = pos == self + ChunkPos::Z;
-        is_left || is_right || is_bottom || is_top || is_back || is_front
+        self.adjacent_chunks()
+            .iter()
+            .any(|adjacent| *adjacent == pos)
     }
 }
 

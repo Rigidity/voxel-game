@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use std::f32::consts::FRAC_PI_2;
 
 use bevy::{core_pipeline::experimental::taa::TemporalAntiAliasPlugin, prelude::*};

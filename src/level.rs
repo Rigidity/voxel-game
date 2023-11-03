@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use async_io::block_on;
 use bevy::{
+    ecs::system::EntityCommands,
     prelude::*,
     render::primitives::Aabb,
     tasks::{AsyncComputeTaskPool, Task},
@@ -9,6 +10,7 @@ use bevy::{
 };
 use bevy_rapier3d::prelude::{Collider, Friction};
 use futures_lite::future;
+use itertools::Itertools;
 use noise::Perlin;
 use parking_lot::{Mutex, RwLock};
 use rusqlite::Connection;
@@ -30,12 +32,10 @@ mod visible_chunks;
 pub use adjacent_sides::AdjacentBlocks;
 pub use chunk::*;
 pub use chunk_data::CHUNK_SIZE;
+pub use chunk_loader::ChunkLoader;
 pub use mesh_builder::*;
 
-use self::{
-    adjacent_sides::AdjacentChunkData, chunk::Chunk, chunk_loader::ChunkLoader,
-    visible_chunks::visible_chunks,
-};
+use self::{chunk::Chunk, visible_chunks::visible_chunks};
 
 #[derive(Resource, Clone, Deref, DerefMut)]
 pub struct Level(Arc<RwLock<LevelInner>>);
@@ -132,7 +132,7 @@ fn load_chunks(
             .insert(VisibilityBundle::default())
             .insert(Friction::new(0.0));
 
-        chunk_loader.load(pos);
+        chunk_loader.queue(pos);
     }
 
     for (entity, pos) in chunks.iter().filter(|ex| !visible.contains(ex.1)) {
@@ -151,11 +151,17 @@ fn mesh_chunks(
     mut commands: Commands,
     registry: Res<BlockRegistry>,
     level: Res<Level>,
-    chunks: Query<(Entity, &ChunkPos), NeedsMesh>,
+    chunks: Query<(Entity, &ChunkPos)>,
+    need_mesh: Query<&ChunkPos, NeedsMesh>,
 ) {
     let thread_pool = AsyncComputeTaskPool::get();
 
-    for (entity, &pos) in chunks.iter() {
+    for (entity, &pos) in need_mesh
+        .iter()
+        .flat_map(|pos| pos.adjacent_chunks().into_iter().chain([*pos]))
+        .unique()
+        .filter_map(|pos| chunks.iter().find(|ex| *ex.1 == pos))
+    {
         let Some(chunk) = level.read().loaded_chunks.get(&pos).cloned() else {
             continue;
         };
@@ -164,37 +170,23 @@ fn mesh_chunks(
             continue;
         };
 
-        macro_rules! adjacent_faces {
-            ( $main:ident, $( $name:ident, $pos:expr, |$row_name:ident, $cell_name:ident|
-                    => [$x:expr, $y:expr, $z:expr]; )* ) => {
-                $( let $name = level.read().loaded_chunks.get(&$pos).map(|chunk| {
-                    let mut data = [[false; CHUNK_SIZE]; CHUNK_SIZE];
-                    for ($row_name, data) in data.iter_mut().enumerate() {
-                        for ($cell_name, data) in data.iter_mut().enumerate() {
-                            *data = chunk.read().block($x, $y, $z).is_some();
-                        }
-                    }
-                    data
-                }); )*
-
-                let $main = AdjacentChunkData { $( $name, )* };
-            };
-        }
-
-        adjacent_faces!(adjacent,
-            left, pos - ChunkPos::X, |y, z| => [CHUNK_SIZE - 1, y, z];
-            right, pos + ChunkPos::X, |y, z| => [0, y, z];
-            top, pos + ChunkPos::Y, |x, z| => [x, 0, z];
-            bottom, pos - ChunkPos::Y, |x, z| => [x, CHUNK_SIZE - 1, z];
-            front, pos + ChunkPos::Z, |x, y| => [x, y, 0];
-            back, pos - ChunkPos::Z, |x, y| => [x, y, CHUNK_SIZE - 1];
-        );
-
-        let registry = registry.clone();
-        let task = thread_pool.spawn(async move { mesh_chunk(adjacent, chunk, registry) });
-
-        entity.insert(MeshTask(task)).remove::<Dirty>();
+        spawn_chunk_mesh_task(&mut entity, thread_pool, &level, &registry, pos, chunk);
     }
+}
+
+fn spawn_chunk_mesh_task(
+    entity: &mut EntityCommands,
+    thread_pool: &AsyncComputeTaskPool,
+    level: &Level,
+    registry: &BlockRegistry,
+    pos: ChunkPos,
+    chunk: Chunk,
+) {
+    let registry = registry.clone();
+    let level = level.clone();
+    let task = thread_pool.spawn(async move { mesh_chunk(level, pos, chunk, registry) });
+
+    entity.insert(MeshTask(task)).remove::<Dirty>();
 }
 
 fn insert_meshes(
