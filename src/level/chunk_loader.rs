@@ -12,7 +12,7 @@ pub struct ChunkLoader(Sender<ChunkPos>);
 
 impl ChunkLoader {
     pub fn new(level: Level, registry: BlockRegistry) -> Self {
-        let (sender, mut receiver) = mpsc::channel();
+        let (sender, receiver) = mpsc::channel();
         std::thread::spawn(move || {
             while let Ok(pos) = receiver.recv() {
                 if level.read().loaded_chunks.contains_key(&pos) {

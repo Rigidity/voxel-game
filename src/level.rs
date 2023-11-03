@@ -36,12 +36,6 @@ pub struct LevelInner {
     perlin_noise: Perlin,
 }
 
-impl LevelInner {
-    fn chunk(&self, pos: ChunkPos) -> Option<&Chunk> {
-        self.loaded_chunks.get(&pos)
-    }
-}
-
 pub struct LevelPlugin;
 
 impl Plugin for LevelPlugin {
@@ -74,6 +68,8 @@ fn create_level(mut commands: Commands, registry: Res<BlockRegistry>) {
     });
 
     let chunk_loader = ChunkLoader::new(level.clone(), registry.clone());
+
+    commands.insert_resource(level);
     commands.insert_resource(chunk_loader);
 }
 
