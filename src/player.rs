@@ -62,6 +62,7 @@ fn setup_player(mut commands: Commands) {
                         start: (CHUNK_SIZE * 5) as f32,
                         end: (CHUNK_SIZE * 7) as f32,
                     },
+                    color: Color::BLUE,
                     ..default()
                 })
                 .insert(Camera3dBundle {

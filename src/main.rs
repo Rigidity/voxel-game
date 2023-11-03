@@ -1,6 +1,8 @@
+use std::f32::consts::FRAC_PI_2;
+
 use bevy::{core_pipeline::experimental::taa::TemporalAntiAliasPlugin, prelude::*};
 use bevy_fps_counter::FpsCounterPlugin;
-use bevy_rapier3d::prelude::{NoUserData, RapierPhysicsPlugin};
+use bevy_rapier3d::prelude::*;
 use block::{dirt::render_dirt, Block};
 use block_registry::BlockRegistry;
 
@@ -16,9 +18,13 @@ mod overlay;
 mod player;
 mod position;
 
+#[derive(Resource, Default)]
+struct ChunkMaterial {
+    handle: Handle<StandardMaterial>,
+}
+
 fn main() {
     App::new()
-        .init_resource::<BlockRegistry>()
         .add_plugins(
             DefaultPlugins
                 .set(ImagePlugin::default_nearest())
@@ -30,13 +36,24 @@ fn main() {
                     ..default()
                 }),
         )
+        .init_resource::<BlockRegistry>()
+        .init_resource::<ChunkMaterial>()
+        .insert_resource(ClearColor(Color::BLUE))
+        .insert_resource(AmbientLight {
+            brightness: 0.8,
+            ..default()
+        })
+        .insert_resource(RapierConfiguration {
+            gravity: Vec3::Y * -9.81 * 2.5,
+            ..default()
+        })
         .add_plugins(TemporalAntiAliasPlugin)
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
         .add_plugins(FpsCounterPlugin)
         .add_plugins(ConfigPlugin)
         .add_plugins(LevelPlugin)
         .add_plugins(PlayerPlugin)
-        .add_systems(Startup, register_blocks)
+        .add_systems(Startup, (register_blocks, setup_handle, setup_world))
         .run();
 }
 
@@ -47,4 +64,37 @@ fn register_blocks(registry: Res<BlockRegistry>) {
             render: render_dirt,
         },
     );
+}
+
+fn setup_handle(
+    mut chunk_material: ResMut<ChunkMaterial>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    server: Res<AssetServer>,
+) {
+    let texture_handle = server.load("blocks/dirt.png");
+
+    let material = StandardMaterial {
+        base_color_texture: Some(texture_handle),
+        perceptual_roughness: 1.0,
+        reflectance: 0.0,
+        ..default()
+    };
+
+    chunk_material.handle = materials.add(material);
+}
+
+fn setup_world(mut commands: Commands) {
+    commands.spawn(DirectionalLightBundle {
+        directional_light: DirectionalLight {
+            shadows_enabled: false,
+            illuminance: 10000.0,
+            ..default()
+        },
+        transform: Transform {
+            translation: Vec3::new(0.0, 500.0, 0.0),
+            rotation: Quat::from_rotation_x(-FRAC_PI_2),
+            ..default()
+        },
+        ..default()
+    });
 }
