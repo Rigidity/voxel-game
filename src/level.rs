@@ -2,11 +2,10 @@ use std::sync::Arc;
 
 use bevy::{prelude::*, utils::HashMap};
 use noise::Perlin;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
+use rusqlite::Connection;
 
-use crate::{
-    block_registry::BlockRegistry, config::Config, player::Player, position::ChunkPos, Database,
-};
+use crate::{block_registry::BlockRegistry, config::Config, player::Player, position::ChunkPos};
 
 mod adjacent_sides;
 mod chunk;
@@ -22,11 +21,17 @@ pub use mesh_builder::*;
 
 use self::{chunk::Chunk, chunk_loader::ChunkLoader, visible_chunks::visible_chunks};
 
-#[derive(Resource, Default, Clone, Deref, DerefMut)]
+#[derive(Resource, Clone, Deref, DerefMut)]
 pub struct Level(Arc<RwLock<LevelInner>>);
 
-#[derive(Default)]
+impl Level {
+    pub fn new(inner: LevelInner) -> Self {
+        Self(Arc::new(RwLock::new(inner)))
+    }
+}
+
 pub struct LevelInner {
+    db: Mutex<Connection>,
     loaded_chunks: HashMap<ChunkPos, Chunk>,
     perlin_noise: Perlin,
 }
@@ -41,19 +46,34 @@ pub struct LevelPlugin;
 
 impl Plugin for LevelPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<Level>()
-            .add_systems(Startup, spawn_chunk_loader)
+        app.add_systems(Startup, create_level)
             .add_systems(Update, load_chunks);
     }
 }
 
-fn spawn_chunk_loader(
-    mut commands: Commands,
-    level: Res<Level>,
-    db: Res<Database>,
-    registry: Res<BlockRegistry>,
-) {
-    let chunk_loader = ChunkLoader::new(level.clone(), db.clone(), registry.clone());
+fn create_level(mut commands: Commands, registry: Res<BlockRegistry>) {
+    let connection = Connection::open("chunks.sqlite").unwrap();
+
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS chunks (
+                x INTEGER,
+                y INTEGER,
+                z INTEGER,
+                data BLOB,
+                UNIQUE(x, y, z)
+            )",
+            (),
+        )
+        .unwrap();
+
+    let level = Level::new(LevelInner {
+        db: Mutex::new(connection),
+        loaded_chunks: HashMap::new(),
+        perlin_noise: Perlin::default(),
+    });
+
+    let chunk_loader = ChunkLoader::new(level.clone(), registry.clone());
     commands.insert_resource(chunk_loader);
 }
 
@@ -70,8 +90,6 @@ fn load_chunks(
 
     let visible = visible_chunks(chunk_pos, config.render_distance);
 
-    let mut chunks_to_load = Vec::new();
-
     for &pos in visible
         .iter()
         .filter(|pos| !chunks.iter().any(|ex| ex.1 == *pos))
@@ -83,15 +101,8 @@ fn load_chunks(
             .insert(TransformBundle::from_transform(transform))
             .insert(VisibilityBundle::default());
 
-        chunks_to_load.push(pos);
+        chunk_loader.load(pos);
     }
-
-    let chunk_loader = chunk_loader.clone();
-    tokio::spawn(async move {
-        for pos in chunks_to_load {
-            chunk_loader.load(pos).await;
-        }
-    });
 
     for (entity, pos) in chunks.iter().filter(|ex| !visible.contains(ex.1)) {
         level.write().loaded_chunks.remove(pos);

@@ -19,7 +19,7 @@ impl Default for ChunkData {
 
 impl ChunkData {
     pub fn block(&self, x: usize, y: usize, z: usize) -> Option<BlockId> {
-        self.blocks[Self::index(x, y, z)].clone()
+        self.blocks[Self::index(x, y, z)]
     }
 
     pub fn block_mut(&mut self, x: usize, y: usize, z: usize) -> &mut Option<BlockId> {
