@@ -28,6 +28,7 @@ mod mesh_builder;
 mod visible_chunks;
 
 pub use adjacent_sides::AdjacentBlocks;
+pub use chunk::*;
 pub use chunk_data::CHUNK_SIZE;
 pub use mesh_builder::*;
 
@@ -143,7 +144,8 @@ fn load_chunks(
 #[derive(Component)]
 struct MeshTask(Task<(Mesh, Option<Collider>)>);
 
-type NeedsMesh = (Without<Handle<Mesh>>, Without<MeshTask>);
+type MissingMesh = (Without<Handle<Mesh>>, Without<MeshTask>);
+type NeedsMesh = Or<(MissingMesh, With<Dirty>)>;
 
 fn mesh_chunks(
     mut commands: Commands,
@@ -191,7 +193,7 @@ fn mesh_chunks(
         let registry = registry.clone();
         let task = thread_pool.spawn(async move { mesh_chunk(adjacent, chunk, registry) });
 
-        entity.insert(MeshTask(task));
+        entity.insert(MeshTask(task)).remove::<Dirty>();
     }
 }
 

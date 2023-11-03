@@ -5,6 +5,9 @@ use parking_lot::RwLock;
 
 use super::chunk_data::ChunkData;
 
+#[derive(Component)]
+pub struct Dirty;
+
 #[derive(Clone, Default, Deref, DerefMut)]
 pub struct Chunk(Arc<RwLock<ChunkData>>);
 
