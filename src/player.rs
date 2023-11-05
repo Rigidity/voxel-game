@@ -6,13 +6,15 @@ use bevy::{
     input::mouse::MouseMotion,
     pbr::ScreenSpaceAmbientOcclusionBundle,
     prelude::*,
+    tasks::AsyncComputeTaskPool,
     window::{CursorGrabMode, PrimaryWindow, Window},
 };
 use bevy_rapier3d::prelude::*;
 
 use crate::{
+    block_registry::BlockRegistry,
     config::Config,
-    level::{ChunkLoader, Dirty, Level, CHUNK_SIZE},
+    level::{save_chunk_data, Database, Dirty, Level, CHUNK_SIZE},
     position::{BlockPos, ChunkPos},
 };
 
@@ -63,10 +65,10 @@ fn setup_player(mut commands: Commands) {
                 .insert(TemporalAntiAliasBundle::default())
                 .insert(FogSettings {
                     falloff: FogFalloff::Linear {
-                        start: (CHUNK_SIZE * 5) as f32,
+                        start: (CHUNK_SIZE * 6) as f32,
                         end: (CHUNK_SIZE * 7) as f32,
                     },
-                    color: Color::BLACK,
+                    color: Color::rgb(0.2, 0.5, 0.8),
                     ..default()
                 })
                 .insert(Camera3dBundle {
@@ -77,7 +79,8 @@ fn setup_player(mut commands: Commands) {
                     }),
                     tonemapping: Tonemapping::None,
                     ..default()
-                });
+                })
+                .insert(UiCameraConfig { show_ui: false });
         });
 }
 
@@ -85,12 +88,14 @@ fn remove_block(
     mut commands: Commands,
     mut gizmos: Gizmos,
     level: Res<Level>,
-    chunk_loader: Res<ChunkLoader>,
+    db: Res<Database>,
+    registry: Res<BlockRegistry>,
     primary_window: Query<&Window, With<PrimaryWindow>>,
     mouse: Res<Input<MouseButton>>,
     camera: Query<&GlobalTransform, With<PlayerCamera>>,
     chunk_query: Query<(Entity, &ChunkPos)>,
 ) {
+    let task_pool = AsyncComputeTaskPool::get();
     let window = primary_window.single();
 
     if window.cursor.grab_mode == CursorGrabMode::None {
@@ -121,7 +126,16 @@ fn remove_block(
     };
 
     *chunk.write().block_mut(relative.0, relative.1, relative.2) = None;
-    chunk_loader.queue(chunk_pos);
+
+    let db = db.clone();
+    let registry = registry.clone();
+
+    task_pool
+        .spawn(async move {
+            let chunk_data = chunk.read().serialize(&registry);
+            save_chunk_data(&db, chunk_pos, chunk_data);
+        })
+        .detach();
 
     if let Some(entity) = chunk_query
         .iter()
@@ -202,7 +216,7 @@ fn player_look(
 
     let mut transform = camera.single_mut();
 
-    for ev in state.reader_motion.iter(&motion) {
+    for ev in state.reader_motion.read(&motion) {
         let (mut yaw, mut pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
 
         let window_scale = window.height().min(window.width());

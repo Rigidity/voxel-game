@@ -3,13 +3,13 @@
 use std::f32::consts::FRAC_PI_2;
 
 use bevy::{core_pipeline::experimental::taa::TemporalAntiAliasPlugin, prelude::*};
-use bevy_fps_counter::FpsCounterPlugin;
 use bevy_rapier3d::prelude::*;
 use block::{dirt::render_dirt, Block};
 use block_registry::BlockRegistry;
 
 use config::ConfigPlugin;
 use level::LevelPlugin;
+use overlay::OverlayPlugin;
 use player::PlayerPlugin;
 
 mod block;
@@ -40,7 +40,7 @@ fn main() {
         )
         .init_resource::<BlockRegistry>()
         .init_resource::<ChunkMaterial>()
-        .insert_resource(ClearColor(Color::BLACK))
+        .insert_resource(ClearColor(Color::rgb(0.2, 0.5, 0.8)))
         .insert_resource(AmbientLight {
             brightness: 0.8,
             ..default()
@@ -51,10 +51,10 @@ fn main() {
         })
         .add_plugins(TemporalAntiAliasPlugin)
         .add_plugins(RapierPhysicsPlugin::<NoUserData>::default())
-        .add_plugins(FpsCounterPlugin)
         .add_plugins(ConfigPlugin)
         .add_plugins(LevelPlugin)
         .add_plugins(PlayerPlugin)
+        .add_plugins(OverlayPlugin)
         .add_systems(Startup, (register_blocks, setup_handle, setup_world))
         .run();
 }

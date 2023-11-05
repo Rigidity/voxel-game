@@ -16,8 +16,15 @@ use parking_lot::{Mutex, RwLock};
 use rusqlite::Connection;
 
 use crate::{
-    block_registry::BlockRegistry, config::Config, level::chunk_mesher::mesh_chunk, player::Player,
-    position::ChunkPos, ChunkMaterial,
+    block_registry::BlockRegistry,
+    config::Config,
+    level::{
+        chunk_data::ChunkData, chunk_generator::generate_chunk, chunk_loader::load_chunk_data,
+        chunk_mesher::mesh_chunk,
+    },
+    player::Player,
+    position::ChunkPos,
+    ChunkMaterial,
 };
 
 mod adjacent_sides;
@@ -32,7 +39,7 @@ mod visible_chunks;
 pub use adjacent_sides::AdjacentBlocks;
 pub use chunk::*;
 pub use chunk_data::CHUNK_SIZE;
-pub use chunk_loader::ChunkLoader;
+pub use chunk_loader::save_chunk_data;
 pub use mesh_builder::*;
 
 use self::{chunk::Chunk, visible_chunks::visible_chunks};
@@ -48,6 +55,7 @@ impl Level {
 
 pub struct LevelInner {
     loaded_chunks: HashMap<ChunkPos, Chunk>,
+    generating_chunks: HashMap<ChunkPos, Task<ChunkData>>,
     perlin_noise: Perlin,
 }
 
@@ -72,12 +80,18 @@ impl Plugin for LevelPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, create_level).add_systems(
             Update,
-            (load_chunks, apply_deferred, (mesh_chunks, insert_meshes)).chain(),
+            (
+                spawn_and_despawn_chunks,
+                load_chunks,
+                apply_deferred,
+                (mesh_chunks, insert_meshes),
+            )
+                .chain(),
         );
     }
 }
 
-fn create_level(mut commands: Commands, registry: Res<BlockRegistry>) {
+fn create_level(mut commands: Commands) {
     let connection = Connection::open("chunks.sqlite").unwrap();
 
     connection
@@ -95,19 +109,17 @@ fn create_level(mut commands: Commands, registry: Res<BlockRegistry>) {
 
     let level = Level::new(LevelInner {
         loaded_chunks: HashMap::new(),
+        generating_chunks: HashMap::new(),
         perlin_noise: Perlin::default(),
     });
     let db = Database::new(connection);
-    let chunk_loader = ChunkLoader::new(level.clone(), db.clone(), registry.clone());
 
     commands.insert_resource(level);
     commands.insert_resource(db);
-    commands.insert_resource(chunk_loader);
 }
 
-fn load_chunks(
+fn spawn_and_despawn_chunks(
     mut commands: Commands,
-    chunk_loader: Res<ChunkLoader>,
     config: Res<Config>,
     level: Res<Level>,
     chunk_material: Res<ChunkMaterial>,
@@ -131,13 +143,83 @@ fn load_chunks(
             .insert(TransformBundle::from_transform(transform))
             .insert(VisibilityBundle::default())
             .insert(Friction::new(0.0));
-
-        chunk_loader.queue(pos);
     }
 
     for (entity, pos) in chunks.iter().filter(|ex| !visible.contains(ex.1)) {
         level.write().loaded_chunks.remove(pos);
+        level.write().generating_chunks.remove(pos);
         commands.entity(entity).despawn_recursive();
+    }
+}
+
+const PARALLEL_CHUNKS: usize = 100;
+
+pub fn load_chunks(
+    level: Res<Level>,
+    db: Res<Database>,
+    registry: Res<BlockRegistry>,
+    chunks: Query<&ChunkPos>,
+    player: Query<&Transform, With<Player>>,
+) {
+    let task_pool = AsyncComputeTaskPool::get();
+    let transform = player.single();
+    let player_chunk = ChunkPos::from(transform.translation);
+    let center_pos = player_chunk.center();
+
+    let mut generated_chunks = HashMap::new();
+
+    level
+        .write()
+        .generating_chunks
+        .retain(|pos, task| match block_on(future::poll_once(task)) {
+            Some(chunk_data) => {
+                generated_chunks.insert(*pos, Chunk::new(chunk_data));
+                false
+            }
+            None => true,
+        });
+
+    level.write().loaded_chunks.extend(generated_chunks);
+
+    let mut currently_generating = level.read().generating_chunks.len();
+
+    for &pos in chunks.iter().sorted_by(|a, b| {
+        a.center()
+            .distance(center_pos)
+            .total_cmp(&b.center().distance(center_pos))
+    }) {
+        let is_loading = level.read().loaded_chunks.contains_key(&pos);
+        let is_generating = level.read().generating_chunks.contains_key(&pos);
+
+        if is_loading || is_generating {
+            continue;
+        }
+
+        if let Some(bytes) = load_chunk_data(&db, pos) {
+            let chunk_data = ChunkData::deserialize(&bytes, &registry);
+            level
+                .write()
+                .loaded_chunks
+                .insert(pos, Chunk::new(chunk_data));
+            continue;
+        }
+
+        if currently_generating >= PARALLEL_CHUNKS {
+            continue;
+        }
+
+        let perlin_noise = level.read().perlin_noise;
+        let db = db.clone();
+        let registry = registry.clone();
+
+        let task = task_pool.spawn(async move {
+            let chunk_data = generate_chunk(&perlin_noise, &registry, pos);
+            save_chunk_data(&db, pos, chunk_data.serialize(&registry));
+            chunk_data
+        });
+
+        level.write().generating_chunks.insert(pos, task);
+        currently_generating += 1;
     }
 }
 
