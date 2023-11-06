@@ -55,7 +55,6 @@ impl Level {
 
 pub struct LevelInner {
     loaded_chunks: HashMap<ChunkPos, Chunk>,
-    generating_chunks: HashMap<ChunkPos, Task<ChunkData>>,
     perlin_noise: Perlin,
 }
 
@@ -81,10 +80,9 @@ impl Plugin for LevelPlugin {
         app.add_systems(Startup, create_level).add_systems(
             Update,
             (
-                spawn_and_despawn_chunks,
                 load_chunks,
                 apply_deferred,
-                (mesh_chunks, insert_meshes),
+                (mesh_chunks, insert_meshes, finish_loading),
             )
                 .chain(),
         );
@@ -109,7 +107,6 @@ fn create_level(mut commands: Commands) {
 
     let level = Level::new(LevelInner {
         loaded_chunks: HashMap::new(),
-        generating_chunks: HashMap::new(),
         perlin_noise: Perlin::default(),
     });
     let db = Database::new(connection);
@@ -118,14 +115,20 @@ fn create_level(mut commands: Commands) {
     commands.insert_resource(db);
 }
 
-fn spawn_and_despawn_chunks(
+#[derive(Component)]
+struct LoadTask(Task<()>);
+
+fn load_chunks(
     mut commands: Commands,
     config: Res<Config>,
     level: Res<Level>,
+    db: Res<Database>,
+    registry: Res<BlockRegistry>,
     chunk_material: Res<ChunkMaterial>,
     chunks: Query<(Entity, &ChunkPos)>,
     player: Query<&Transform, With<Player>>,
 ) {
+    let task_pool = AsyncComputeTaskPool::get();
     let transform = player.single();
     let chunk_pos = ChunkPos::from(transform.translation);
 
@@ -136,105 +139,65 @@ fn spawn_and_despawn_chunks(
         .filter(|pos| !chunks.iter().any(|ex| ex.1 == *pos))
     {
         let transform = Transform::from_translation(pos.into());
+        let perlin_noise = level.read().perlin_noise;
+        let level = level.clone();
+        let registry = registry.clone();
+        let db = db.clone();
+
+        let task = task_pool.spawn(async move {
+            let chunk_data = match load_chunk_data(&db, pos) {
+                Some(bytes) => ChunkData::deserialize(&bytes, &registry),
+                None => {
+                    let chunk_data = generate_chunk(&perlin_noise, &registry, pos);
+                    save_chunk_data(&db, pos, chunk_data.serialize(&registry));
+                    chunk_data
+                }
+            };
+            level
+                .write()
+                .loaded_chunks
+                .insert(pos, Chunk::new(chunk_data));
+        });
 
         commands
             .spawn(pos)
             .insert(chunk_material.handle.clone())
             .insert(TransformBundle::from_transform(transform))
             .insert(VisibilityBundle::default())
-            .insert(Friction::new(0.0));
+            .insert(Friction::new(0.0))
+            .insert(LoadTask(task));
     }
 
     for (entity, pos) in chunks.iter().filter(|ex| !visible.contains(ex.1)) {
         level.write().loaded_chunks.remove(pos);
-        level.write().generating_chunks.remove(pos);
         commands.entity(entity).despawn_recursive();
     }
 }
 
-const PARALLEL_CHUNKS: usize = 100;
-
-pub fn load_chunks(
-    level: Res<Level>,
-    db: Res<Database>,
-    registry: Res<BlockRegistry>,
-    chunks: Query<&ChunkPos>,
-    player: Query<&Transform, With<Player>>,
-) {
-    let task_pool = AsyncComputeTaskPool::get();
-    let transform = player.single();
-    let player_chunk = ChunkPos::from(transform.translation);
-    let center_pos = player_chunk.center();
-
-    let mut generated_chunks = HashMap::new();
-
-    level
-        .write()
-        .generating_chunks
-        .retain(|pos, task| match block_on(future::poll_once(task)) {
-            Some(chunk_data) => {
-                generated_chunks.insert(*pos, Chunk::new(chunk_data));
-                false
-            }
-            None => true,
-        });
-
-    level.write().loaded_chunks.extend(generated_chunks);
-
-    let mut currently_generating = level.read().generating_chunks.len();
-
-    for &pos in chunks.iter().sorted_by(|a, b| {
-        a.center()
-            .distance(center_pos)
-            .total_cmp(&b.center().distance(center_pos))
-    }) {
-        let is_loading = level.read().loaded_chunks.contains_key(&pos);
-        let is_generating = level.read().generating_chunks.contains_key(&pos);
-
-        if is_loading || is_generating {
-            continue;
+fn finish_loading(mut commands: Commands, mut query: Query<(Entity, &mut LoadTask)>) {
+    for (entity, mut load_task) in query.iter_mut() {
+        if let Some(()) = block_on(future::poll_once(&mut load_task.0)) {
+            let mut entity = commands.entity(entity);
+            entity.remove::<LoadTask>();
         }
-
-        if let Some(bytes) = load_chunk_data(&db, pos) {
-            let chunk_data = ChunkData::deserialize(&bytes, &registry);
-            level
-                .write()
-                .loaded_chunks
-                .insert(pos, Chunk::new(chunk_data));
-            continue;
-        }
-
-        if currently_generating >= PARALLEL_CHUNKS {
-            continue;
-        }
-
-        let perlin_noise = level.read().perlin_noise;
-        let db = db.clone();
-        let registry = registry.clone();
-
-        let task = task_pool.spawn(async move {
-            let chunk_data = generate_chunk(&perlin_noise, &registry, pos);
-            save_chunk_data(&db, pos, chunk_data.serialize(&registry));
-            chunk_data
-        });
-
-        level.write().generating_chunks.insert(pos, task);
-        currently_generating += 1;
     }
 }
 
 #[derive(Component)]
 struct MeshTask(Task<(Mesh, Option<Collider>)>);
 
-type MissingMesh = (Without<Handle<Mesh>>, Without<MeshTask>);
-type NeedsMesh = Or<(MissingMesh, With<Dirty>)>;
-
 fn mesh_chunks(
     mut commands: Commands,
     registry: Res<BlockRegistry>,
     level: Res<Level>,
     chunks: Query<(Entity, &ChunkPos)>,
-    need_mesh: Query<&ChunkPos, NeedsMesh>,
+    need_mesh: Query<
+        &ChunkPos,
+        Or<(
+            (Without<Handle<Mesh>>, Without<MeshTask>, Without<LoadTask>),
+            With<Dirty>,
+        )>,
+    >,
 ) {
     let thread_pool = AsyncComputeTaskPool::get();
 
