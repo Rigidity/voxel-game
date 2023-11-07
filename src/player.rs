@@ -39,8 +39,8 @@ impl Plugin for PlayerPlugin {
                 Update,
                 (
                     toggle_grab,
-                    player_look,
                     player_move,
+                    player_look,
                     remove_block.after(apply_deferred),
                 ),
             );

@@ -79,12 +79,7 @@ impl Plugin for LevelPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, create_level).add_systems(
             Update,
-            (
-                load_chunks,
-                apply_deferred,
-                (mesh_chunks, insert_meshes, finish_loading),
-            )
-                .chain(),
+            (load_chunks, apply_deferred, (mesh_chunks, insert_meshes)).chain(),
         );
     }
 }
@@ -116,7 +111,7 @@ fn create_level(mut commands: Commands) {
 }
 
 #[derive(Component)]
-struct LoadTask(Task<()>);
+struct LoadTask(Task<ChunkData>);
 
 fn load_chunks(
     mut commands: Commands,
@@ -125,8 +120,8 @@ fn load_chunks(
     db: Res<Database>,
     registry: Res<BlockRegistry>,
     chunk_material: Res<ChunkMaterial>,
-    chunks: Query<(Entity, &ChunkPos)>,
     player: Query<&Transform, With<Player>>,
+    mut chunks: Query<(Entity, &ChunkPos, Option<&mut LoadTask>)>,
 ) {
     let task_pool = AsyncComputeTaskPool::get();
     let transform = player.single();
@@ -140,23 +135,18 @@ fn load_chunks(
     {
         let transform = Transform::from_translation(pos.into());
         let perlin_noise = level.read().perlin_noise;
-        let level = level.clone();
         let registry = registry.clone();
         let db = db.clone();
 
         let task = task_pool.spawn(async move {
-            let chunk_data = match load_chunk_data(&db, pos) {
+            match load_chunk_data(&db, pos) {
                 Some(bytes) => ChunkData::deserialize(&bytes, &registry),
                 None => {
                     let chunk_data = generate_chunk(&perlin_noise, &registry, pos);
                     save_chunk_data(&db, pos, chunk_data.serialize(&registry));
                     chunk_data
                 }
-            };
-            level
-                .write()
-                .loaded_chunks
-                .insert(pos, Chunk::new(chunk_data));
+            }
         });
 
         commands
@@ -168,17 +158,22 @@ fn load_chunks(
             .insert(LoadTask(task));
     }
 
-    for (entity, pos) in chunks.iter().filter(|ex| !visible.contains(ex.1)) {
-        level.write().loaded_chunks.remove(pos);
-        commands.entity(entity).despawn_recursive();
-    }
-}
+    for (entity, pos, load_task) in chunks.iter_mut() {
+        if visible.contains(pos) {
+            if let Some(chunk_data) =
+                load_task.and_then(|mut task| block_on(future::poll_once(&mut task.0)))
+            {
+                let mut entity = commands.entity(entity);
+                entity.remove::<LoadTask>();
 
-fn finish_loading(mut commands: Commands, mut query: Query<(Entity, &mut LoadTask)>) {
-    for (entity, mut load_task) in query.iter_mut() {
-        if let Some(()) = block_on(future::poll_once(&mut load_task.0)) {
-            let mut entity = commands.entity(entity);
-            entity.remove::<LoadTask>();
+                level
+                    .write()
+                    .loaded_chunks
+                    .insert(*pos, Chunk::new(chunk_data));
+            }
+        } else {
+            level.write().loaded_chunks.remove(pos);
+            commands.entity(entity).despawn_recursive();
         }
     }
 }
@@ -199,7 +194,7 @@ fn mesh_chunks(
         )>,
     >,
 ) {
-    let thread_pool = AsyncComputeTaskPool::get();
+    let task_pool = AsyncComputeTaskPool::get();
 
     for (entity, &pos) in need_mesh
         .iter()
@@ -215,21 +210,26 @@ fn mesh_chunks(
             continue;
         };
 
-        spawn_chunk_mesh_task(&mut entity, thread_pool, &level, &registry, pos, chunk);
+        spawn_chunk_mesh_task(
+            &mut entity,
+            task_pool,
+            level.clone(),
+            registry.clone(),
+            pos,
+            chunk,
+        );
     }
 }
 
 fn spawn_chunk_mesh_task(
     entity: &mut EntityCommands,
-    thread_pool: &AsyncComputeTaskPool,
-    level: &Level,
-    registry: &BlockRegistry,
+    task_pool: &AsyncComputeTaskPool,
+    level: Level,
+    registry: BlockRegistry,
     pos: ChunkPos,
     chunk: Chunk,
 ) {
-    let registry = registry.clone();
-    let level = level.clone();
-    let task = thread_pool.spawn(async move { mesh_chunk(level, pos, chunk, registry) });
+    let task = task_pool.spawn(async move { mesh_chunk(level, pos, chunk, registry) });
 
     entity.insert(MeshTask(task)).remove::<Dirty>();
 }
